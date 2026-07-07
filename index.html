@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mon espace</title>
+  <meta name="description" content="Espace personnel : démarchage, to-do, réseaux, boutique, idées et finances.">
+  <link rel="preconnect" href="">
+  <link rel="stylesheet" href="assets/css/styles.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8C%B8%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+  <!-- App shell -->
+  <div id="app">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <span class="brand-mark">🌸</span>
+        <input class="brand-title" id="brandTitle" value="Mon espace" aria-label="Titre de l'espace" maxlength="32">
+      </div>
+
+      <nav class="nav" id="nav" aria-label="Navigation principale">
+        <button class="nav-item" data-section="outreach"><span class="nav-ico">📮</span><span class="nav-txt">Démarchage</span></button>
+        <button class="nav-item" data-section="todo"><span class="nav-ico">✅</span><span class="nav-txt">To-do</span></button>
+        <button class="nav-item" data-section="social"><span class="nav-ico">📱</span><span class="nav-txt">Réseaux</span></button>
+        <button class="nav-item" data-section="shop"><span class="nav-ico">🛍️</span><span class="nav-txt">Boutique</span></button>
+        <button class="nav-item" data-section="ideas"><span class="nav-ico">💡</span><span class="nav-txt">Idées</span></button>
+        <button class="nav-item" data-section="finances"><span class="nav-ico">💰</span><span class="nav-txt">Finances</span></button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <button class="btn btn-ghost btn-sm" id="btnExport" title="Télécharger une sauvegarde">⬇️ Exporter</button>
+        <button class="btn btn-ghost btn-sm" id="btnImport" title="Charger une sauvegarde">⬆️ Importer</button>
+        <input type="file" id="importFile" accept="application/json" hidden>
+        <p class="save-hint" id="saveHint">Enregistré sur cet appareil</p>
+      </div>
+    </aside>
+
+    <!-- Mobile top bar -->
+    <header class="topbar">
+      <button class="hamburger" id="hamburger" aria-label="Menu">☰</button>
+      <span class="topbar-title" id="topbarTitle">Mon espace</span>
+    </header>
+
+    <!-- Main content -->
+    <main class="main" id="main">
+      <section class="view" id="view"></section>
+    </main>
+  </div>
+
+  <div class="scrim" id="scrim"></div>
+
+  <!-- Modal host -->
+  <div class="modal-host" id="modalHost" hidden></div>
+
+  <!-- Toast host -->
+  <div class="toast-host" id="toastHost" aria-live="polite"></div>
+
+  <script src="assets/js/store.js"></script>
+  <script src="assets/js/charts.js"></script>
+  <script src="assets/js/ui.js"></script>
+  <script src="assets/js/sections.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>
