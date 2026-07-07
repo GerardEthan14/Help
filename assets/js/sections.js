@@ -389,6 +389,7 @@ window.Sections = (function () {
       filtered.forEach((p) => grid.appendChild(storeItem(p)));
       root.appendChild(grid);
     } else {
+      root.appendChild(h('p', { class: 'sub', style: 'margin:-6px 0 12px', html: '↕️ Glisse la poignée <b>⠿</b> (en haut à gauche d’un produit) pour les réordonner.' }));
       const grid = h('div', { class: 'shop-grid' });
       filtered.forEach((p) => grid.appendChild(productCard(p, cats)));
       root.appendChild(grid);
@@ -499,33 +500,62 @@ window.Sections = (function () {
       h('div', { class: 'product-row', style: 'margin-top:2px' }, [h('span', { class: 'badge ' + (p.statut === 'En ligne' ? 'online' : 'prep'), text: p.statut }), del]),
     ]);
 
-    return h('div', { class: 'product' }, [photo, body]);
+    // glisser-déposer pour réordonner (poignée = source, carte = cible)
+    const grip = h('div', { class: 'prod-grip', text: '⠿', title: 'Glisser pour réordonner', draggable: true });
+    const card = h('div', { class: 'product' }, [grip, photo, body]);
+    card.dataset.id = p.id;
+    grip.addEventListener('dragstart', (e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', p.id); card.classList.add('dragging'); });
+    grip.addEventListener('dragend', () => card.classList.remove('dragging'));
+    card.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; card.classList.add('drag-over'); });
+    card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+    card.addEventListener('drop', (e) => {
+      e.preventDefault(); card.classList.remove('drag-over');
+      const id = e.dataTransfer.getData('text/plain');
+      if (id && id !== p.id) Store.reorder('shop', id, p.id);
+    });
+    return card;
   }
 
   /* =========================================================
      5) IDÉES (tableau blanc)
      ========================================================= */
   const NOTE_COLORS = ['#fbeec2', '#f7d9df', '#d9ead3', '#d6e6f5', '#e7ddf3', '#ffffff'];
+  let topZ = 1;
+  const fallbackX = (i) => 16 + (i % 4) * 262;
+  const fallbackY = (i) => 16 + Math.floor(i / 4) * 250;
 
   function ideas() {
     const notes = Store.list('ideas');
+    topZ = notes.reduce((m, n) => Math.max(m, n.z || 1), 1);
     const root = h('div');
     const addBtn = h('button', {
       class: 'btn btn-primary', text: '+ Nouvelle idée',
-      onclick: () => Store.add('ideas', { ref: '', lien: '', note: '', color: NOTE_COLORS[0], image: '', sketch: '' }),
+      onclick: () => {
+        const k = Store.list('ideas').length;
+        Store.add('ideas', { ref: '', lien: '', note: '', color: NOTE_COLORS[0], image: '', sketch: '',
+          x: 24 + (k % 6) * 34, y: 24 + (k % 6) * 30, w: 244, z: ++topZ });
+      },
     });
-    root.appendChild(UI.pageHead('💡', 'Idées', 'Ton tableau blanc : inspirations, images, liens et notes.', addBtn));
-    root.appendChild(h('p', { class: 'sub', style: 'margin:-8px 0 14px', html: 'Astuce : clique sur <b>⤢ Agrandir</b> pour coller une image, dessiner ou écrire à la main ✍️. Tu peux aussi <b>coller (Ctrl/Cmd+V)</b> une image directement sur une note.' }));
+    root.appendChild(UI.pageHead('💡', 'Idées', 'Ton tableau blanc : déplace, redimensionne, colle des images et dessine.', addBtn));
+    root.appendChild(h('p', { class: 'sub board-hint', style: 'margin:-8px 0 12px', html: '✋ Déplace un post-it par sa <b>poignée ⠿</b> (en haut), redimensionne-le par le <b>coin ↘</b>, et clique <b>⤢</b> pour dessiner / coller une image.' }));
 
     if (!notes.length) { root.appendChild(UI.empty('🧠', 'Colle ta première idée sur le tableau !')); return root; }
 
-    const board = h('div', { class: 'board' });
-    notes.forEach((n) => board.appendChild(noteCard(n)));
-    root.appendChild(board);
+    let maxR = 900, maxB = 520;
+    const sizer = h('div', { style: 'position:relative' });
+    notes.forEach((n, i) => {
+      sizer.appendChild(noteCard(n, i));
+      const x = n.x ?? fallbackX(i), y = n.y ?? fallbackY(i);
+      maxR = Math.max(maxR, x + (n.w || 244) + 40);
+      maxB = Math.max(maxB, y + (n.h || 240) + 40);
+    });
+    sizer.style.width = maxR + 'px';
+    sizer.style.height = maxB + 'px';
+    root.appendChild(h('div', { class: 'board-free', style: 'height:74vh' }, [sizer]));
     return root;
   }
 
-  function noteCard(n) {
+  function noteCard(n, i) {
     const ref = h('input', { class: 'note-ref', placeholder: 'Référence / inspiration', value: n.ref });
     ref.addEventListener('input', () => Store.update('ideas', n.id, { ref: ref.value }, { silent: true }));
 
@@ -557,8 +587,57 @@ window.Sections = (function () {
     const del = h('button', { class: 'icon-btn danger', title: 'Supprimer', text: '🗑',
       onclick: async () => { if (await UI.confirm('Supprimer cette idée ?')) Store.remove('ideas', n.id); } });
 
-    const card = h('div', { class: 'note', style: `background:${n.color || '#fff'}` },
-      [ref, linkInput, linkPreview, media, noteTa, h('div', { class: 'note-foot' }, [swatches, h('div', { style: 'display:flex;gap:2px' }, [expand, del])])].filter(Boolean));
+    const grip = h('div', { class: 'note-grip' }, [
+      h('span', { class: 'dots', text: '⠿', title: 'Déplacer' }),
+      h('div', { class: 'grip-actions' }, [expand, del]),
+    ]);
+    const body = h('div', { class: 'note-body' },
+      [ref, linkInput, linkPreview, media, noteTa, h('div', { class: 'note-foot' }, [swatches])].filter(Boolean));
+    const resize = h('div', { class: 'note-resize', title: 'Redimensionner' });
+
+    const x = n.x ?? fallbackX(i), y = n.y ?? fallbackY(i);
+    const card = h('div', { class: 'note free' }, [grip, body, resize]);
+    card.style.left = x + 'px';
+    card.style.top = y + 'px';
+    card.style.width = (n.w || 244) + 'px';
+    if (n.h) card.style.height = n.h + 'px';
+    card.style.background = n.color || '#fff';
+    card.style.zIndex = n.z || 1;
+
+    // déplacement (par la poignée)
+    grip.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('.grip-actions')) return;
+      e.preventDefault();
+      grip.setPointerCapture(e.pointerId);
+      card.classList.add('dragging');
+      card.style.zIndex = ++topZ;
+      const sx = e.clientX, sy = e.clientY, ox = parseFloat(card.style.left) || 0, oy = parseFloat(card.style.top) || 0;
+      const move = (ev) => { card.style.left = Math.max(0, ox + ev.clientX - sx) + 'px'; card.style.top = Math.max(0, oy + ev.clientY - sy) + 'px'; };
+      const up = () => {
+        grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', up);
+        card.classList.remove('dragging');
+        Store.update('ideas', n.id, { x: parseFloat(card.style.left), y: parseFloat(card.style.top), z: topZ }, { silent: true });
+      };
+      grip.addEventListener('pointermove', move);
+      grip.addEventListener('pointerup', up);
+    });
+
+    // redimensionnement (par le coin)
+    resize.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      resize.setPointerCapture(e.pointerId);
+      const sw = card.offsetWidth, sh = card.offsetHeight, sx = e.clientX, sy = e.clientY;
+      const move = (ev) => {
+        card.style.width = Math.max(184, sw + ev.clientX - sx) + 'px';
+        card.style.height = Math.max(150, sh + ev.clientY - sy) + 'px';
+      };
+      const up = () => {
+        resize.removeEventListener('pointermove', move); resize.removeEventListener('pointerup', up);
+        Store.update('ideas', n.id, { w: parseFloat(card.style.width), h: parseFloat(card.style.height) }, { silent: true });
+      };
+      resize.addEventListener('pointermove', move);
+      resize.addEventListener('pointerup', up);
+    });
 
     // coller une image directement sur la note
     card.addEventListener('paste', async (e) => {

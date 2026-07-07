@@ -97,6 +97,18 @@ window.Store = (function () {
     commit();
   }
 
+  // déplace `id` juste avant `targetId` (ou en fin si targetId absent)
+  function reorder(coll, id, targetId) {
+    const arr = state[coll];
+    const from = arr.findIndex((r) => r.id === id);
+    if (from < 0 || id === targetId) return;
+    const [item] = arr.splice(from, 1);
+    let to = targetId ? arr.findIndex((r) => r.id === targetId) : arr.length;
+    if (to < 0) to = arr.length;
+    arr.splice(to, 0, item);
+    commit();
+  }
+
   function setSetting(k, v) {
     state.settings[k] = v;
     commit();
@@ -162,7 +174,7 @@ window.Store = (function () {
   }
 
   return {
-    get, list, add, update, remove, move,
+    get, list, add, update, remove, move, reorder,
     setSetting, subscribe, exportFile, importFile, uid,
     categories, addCategory, removeCategory, renameCategory,
   };
