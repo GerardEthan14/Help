@@ -49,6 +49,43 @@ window.UI = (function () {
     });
   }
 
+  /* ---- modale générique (contenu DOM libre) ---- */
+  function openModal(opts) {
+    const host = document.getElementById('modalHost');
+    host.hidden = false;
+    host.innerHTML = '';
+    const close = () => { host.hidden = true; host.innerHTML = ''; host.onclick = null; if (opts.onClose) opts.onClose(); };
+    const head = h('div', { class: 'modal-head', style: 'display:flex;justify-content:space-between;align-items:center;gap:12px' }, [
+      h('span', { text: opts.title || '' }),
+      h('button', { class: 'icon-btn', text: '✕', title: 'Fermer', onclick: close }),
+    ]);
+    const modal = h('div', { class: 'modal' + (opts.wide ? ' modal-wide' : '') }, [
+      head,
+      h('div', { class: 'modal-body' }, opts.body),
+      opts.footer ? h('div', { class: 'modal-foot' }, opts.footer) : null,
+    ].filter(Boolean));
+    host.appendChild(modal);
+    host.onclick = (e) => { if (e.target === host) close(); };
+    return close;
+  }
+
+  /* ---- petite saisie texte ---- */
+  function prompt(message, value, okLabel) {
+    return new Promise((resolve) => {
+      const input = h('input', { class: 'field', value: value || '', style: 'width:100%' });
+      const close = openModal({
+        title: message,
+        body: [input],
+        footer: [
+          h('button', { class: 'btn btn-ghost', text: 'Annuler', onclick: () => { close(); resolve(null); } }),
+          h('button', { class: 'btn btn-primary', text: okLabel || 'Valider', onclick: () => { const v = input.value.trim(); close(); resolve(v || null); } }),
+        ],
+      });
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { const v = input.value.trim(); close(); resolve(v || null); } });
+      setTimeout(() => input.focus(), 30);
+    });
+  }
+
   /* ---- redimensionnement image -> dataURL (garde le localStorage léger) ---- */
   function resizeImage(file, maxSize) {
     maxSize = maxSize || 900;
@@ -205,5 +242,5 @@ window.UI = (function () {
     return h('div', { class: 'empty' }, [h('div', { class: 'big', text: emoji }), h('div', { text })]);
   }
 
-  return { h, toast, confirm, resizeImage, fmt, editableTable, buildRow, pageHead, empty };
+  return { h, toast, confirm, prompt, openModal, resizeImage, fmt, editableTable, buildRow, pageHead, empty };
 })();

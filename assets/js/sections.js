@@ -5,11 +5,21 @@
 window.Sections = (function () {
   const { h, fmt } = UI;
 
+  // palette catégorielle validée (mode clair) — attribution stable par entité
+  const CAT_COLORS = ['#2a78d6', '#1baf7a', '#eda100', '#008300', '#4a3aa7', '#e34948', '#e87ba4', '#eb6834'];
+  function colorMap(names) {
+    const sorted = Array.from(new Set(names)).sort((a, b) => a.localeCompare(b));
+    const map = {};
+    sorted.forEach((n, i) => { map[n] = CAT_COLORS[i % CAT_COLORS.length]; });
+    return map;
+  }
+
   // état de vue local (persistant entre re-rendus)
   const vs = {
     outreach: { q: '', statut: '', type: '' },
     todo: { view: 'list', calMonth: fmt.thisMonth(), focusAdd: false },
     finances: { month: '' },
+    shop: { cat: 'all', view: 'edit' },
   };
 
   /* =========================================================
@@ -338,22 +348,109 @@ window.Sections = (function () {
 
   function shop() {
     const products = Store.list('shop');
+    const cats = Store.categories();
     const root = h('div');
-    const addBtn = h('button', {
-      class: 'btn btn-primary', text: '+ Ajouter un produit',
-      onclick: () => Store.add('shop', { nom: '', prix: 0, statut: 'En préparation', stock: '', photo: '' }),
+
+    // la catégorie active reçoit les nouveaux produits (sinon la 1re)
+    const defaultCat = (vs.shop.cat !== 'all' && cats.includes(vs.shop.cat)) ? vs.shop.cat : (cats[0] || '');
+    const actions = h('div', { class: 'page-actions' }, [
+      h('button', { class: 'btn btn-primary', text: '+ Ajouter un produit',
+        onclick: () => Store.add('shop', { nom: '', prix: 0, statut: 'En préparation', stock: '', photo: '', categorie: defaultCat }) }),
+    ]);
+    root.appendChild(UI.pageHead('🛍️', 'Boutique', 'Ton classeur produits, rangé par catégorie — prêt pour octobre.', actions));
+
+    // onglets catégories
+    const tabs = h('div', { class: 'tabs' });
+    const countAll = products.length;
+    tabs.appendChild(tab('Tous', countAll, vs.shop.cat === 'all', () => { vs.shop.cat = 'all'; App.render(); }));
+    cats.forEach((c) => {
+      const cnt = products.filter((p) => p.categorie === c).length;
+      tabs.appendChild(tab(c, cnt, vs.shop.cat === c, () => { vs.shop.cat = c; App.render(); }));
     });
-    root.appendChild(UI.pageHead('🛍️', 'Boutique', 'Tes produits : prix, statut, stock et photo.', addBtn));
+    tabs.appendChild(h('button', { class: 'tab tab-manage', text: '⚙️ Gérer', title: 'Ajouter / renommer / supprimer une catégorie', onclick: manageCategories }));
+    root.appendChild(tabs);
 
-    if (!products.length) { root.appendChild(UI.empty('🛒', 'Aucun produit. Ajoute ta première création !')); return root; }
+    // bascule édition / aperçu vitrine
+    const seg = h('div', { class: 'seg', style: 'margin-bottom:16px' }, [
+      segBtn('✏️ Édition', vs.shop.view === 'edit', () => { vs.shop.view = 'edit'; App.render(); }),
+      segBtn('👁️ Aperçu boutique', vs.shop.view === 'preview', () => { vs.shop.view = 'preview'; App.render(); }),
+    ]);
+    root.appendChild(seg);
 
-    const grid = h('div', { class: 'shop-grid' });
-    products.forEach((p) => grid.appendChild(productCard(p)));
-    root.appendChild(grid);
+    // produits filtrés
+    const filtered = vs.shop.cat === 'all' ? products : products.filter((p) => p.categorie === vs.shop.cat);
+    if (!filtered.length) {
+      root.appendChild(UI.empty('🛒', vs.shop.cat === 'all' ? 'Aucun produit. Ajoute ta première création !' : `Aucun produit dans « ${vs.shop.cat} » pour l’instant.`));
+      return root;
+    }
+
+    if (vs.shop.view === 'preview') {
+      const grid = h('div', { class: 'store-grid' });
+      filtered.forEach((p) => grid.appendChild(storeItem(p)));
+      root.appendChild(grid);
+    } else {
+      const grid = h('div', { class: 'shop-grid' });
+      filtered.forEach((p) => grid.appendChild(productCard(p, cats)));
+      root.appendChild(grid);
+    }
     return root;
   }
 
-  function productCard(p) {
+  function tab(label, count, active, onclick) {
+    return h('button', { class: 'tab' + (active ? ' active' : ''), onclick }, [
+      document.createTextNode(label), h('span', { class: 'count', text: String(count) }),
+    ]);
+  }
+
+  // vitrine (lecture seule, comme la vraie boutique)
+  function storeItem(p) {
+    const photo = h('div', { class: 'store-photo' });
+    if (p.photo) photo.appendChild(h('img', { src: p.photo, alt: p.nom || 'produit' }));
+    else photo.appendChild(h('span', { class: 'ph', text: '📷' }));
+    return h('div', { class: 'store-item' }, [
+      photo,
+      h('div', { class: 'store-body' }, [
+        p.categorie ? h('div', { class: 'store-cat', text: p.categorie }) : null,
+        h('div', { class: 'store-name', text: p.nom || 'Sans nom' }),
+        h('div', { class: 'store-price', text: p.prix ? fmt.money2(p.prix) : '—' }),
+        h('div', { style: 'margin-top:6px' }, [h('span', { class: 'badge ' + (p.statut === 'En ligne' ? 'online' : 'prep'), text: p.statut })]),
+      ].filter(Boolean)),
+    ]);
+  }
+
+  function manageCategories() {
+    function bodyList() {
+      const list = h('div', { style: 'display:flex;flex-direction:column;gap:8px' });
+      Store.categories().forEach((c) => {
+        list.appendChild(h('div', { style: 'display:flex;align-items:center;gap:8px' }, [
+          h('span', { style: 'flex:1;font-weight:600', text: c }),
+          h('button', { class: 'btn btn-ghost btn-sm', text: '✏️ Renommer', onclick: async () => {
+            const nn = await UI.prompt('Nouveau nom de la catégorie', c, 'Renommer');
+            if (nn) { Store.renameCategory(c, nn); rerender(); }
+          } }),
+          h('button', { class: 'btn btn-ghost btn-sm btn-danger', text: '🗑', onclick: async () => {
+            if (await UI.confirm(`Supprimer la catégorie « ${c} » ? Les produits associés seront conservés mais sans catégorie.`)) { Store.removeCategory(c); rerender(); }
+          } }),
+        ]));
+      });
+      const addBtn = h('button', { class: 'btn btn-ghost btn-sm', style: 'margin-top:6px;align-self:flex-start', text: '+ Nouvelle catégorie', onclick: async () => {
+        const nn = await UI.prompt('Nom de la nouvelle catégorie', '', 'Ajouter');
+        if (nn) { Store.addCategory(nn); rerender(); }
+      } });
+      return [list, addBtn];
+    }
+    let close;
+    function rerender() { if (close) close(); open(); }
+    function open() {
+      close = UI.openModal({ title: 'Gérer les catégories', body: bodyList(),
+        footer: [h('button', { class: 'btn btn-primary', text: 'Fermer', onclick: () => close() })],
+        onClose: () => App.render() });
+    }
+    open();
+  }
+
+  function productCard(p, cats) {
+    cats = cats || Store.categories();
     // photo
     const photo = h('div', { class: 'product-photo' });
     if (p.photo) photo.appendChild(h('img', { src: p.photo, alt: p.nom || 'produit' }));
@@ -386,10 +483,17 @@ window.Sections = (function () {
     const stock = h('input', { class: 'field', style: 'font-size:13px', placeholder: 'Stock / dispo (ex : 12, sur commande…)', value: p.stock });
     stock.addEventListener('input', () => Store.update('shop', p.id, { stock: stock.value }, { silent: true }));
 
+    // catégorie
+    const cat = h('select', { class: 'field cat-select', style: 'width:100%' });
+    cat.appendChild(h('option', { value: '' }, '— Sans catégorie —'));
+    cats.forEach((c) => { const o = h('option', { value: c }, c); if (c === p.categorie) o.selected = true; cat.appendChild(o); });
+    cat.addEventListener('change', () => Store.update('shop', p.id, { categorie: cat.value }));
+
     const del = h('button', { class: 'icon-btn danger', title: 'Supprimer', text: '🗑', onclick: async () => { if (await UI.confirm('Supprimer ce produit ?')) Store.remove('shop', p.id); } });
 
     const body = h('div', { class: 'product-body' }, [
       name,
+      cat,
       h('div', { class: 'product-row' }, [h('span', { class: 'nowrap', style: 'display:flex;align-items:center;gap:4px' }, [price, h('span', { class: 'muted', text: '€' })]), statut]),
       stock,
       h('div', { class: 'product-row', style: 'margin-top:2px' }, [h('span', { class: 'badge ' + (p.statut === 'En ligne' ? 'online' : 'prep'), text: p.statut }), del]),
@@ -408,9 +512,10 @@ window.Sections = (function () {
     const root = h('div');
     const addBtn = h('button', {
       class: 'btn btn-primary', text: '+ Nouvelle idée',
-      onclick: () => Store.add('ideas', { ref: '', lien: '', note: '', color: NOTE_COLORS[0] }),
+      onclick: () => Store.add('ideas', { ref: '', lien: '', note: '', color: NOTE_COLORS[0], image: '', sketch: '' }),
     });
-    root.appendChild(UI.pageHead('💡', 'Idées', 'Ton tableau blanc : inspirations, liens et notes.', addBtn));
+    root.appendChild(UI.pageHead('💡', 'Idées', 'Ton tableau blanc : inspirations, images, liens et notes.', addBtn));
+    root.appendChild(h('p', { class: 'sub', style: 'margin:-8px 0 14px', html: 'Astuce : clique sur <b>⤢ Agrandir</b> pour coller une image, dessiner ou écrire à la main ✍️. Tu peux aussi <b>coller (Ctrl/Cmd+V)</b> une image directement sur une note.' }));
 
     if (!notes.length) { root.appendChild(UI.empty('🧠', 'Colle ta première idée sur le tableau !')); return root; }
 
@@ -424,31 +529,165 @@ window.Sections = (function () {
     const ref = h('input', { class: 'note-ref', placeholder: 'Référence / inspiration', value: n.ref });
     ref.addEventListener('input', () => Store.update('ideas', n.id, { ref: ref.value }, { silent: true }));
 
-    const noteTa = h('textarea', { class: 'note-note', rows: 3, placeholder: 'Note personnelle…' });
-    noteTa.value = n.note;
-    const autoGrow = () => { noteTa.style.height = 'auto'; noteTa.style.height = noteTa.scrollHeight + 'px'; };
-    noteTa.addEventListener('input', () => { Store.update('ideas', n.id, { note: noteTa.value }, { silent: true }); autoGrow(); });
-    setTimeout(autoGrow, 0);
-
-    // lien : champ éditable + aperçu cliquable
     const linkInput = h('input', { class: 'note-ref', style: 'font-weight:500;font-size:12.5px', placeholder: '🔗 Lien (https://…)', value: n.lien });
     linkInput.addEventListener('input', () => Store.update('ideas', n.id, { lien: linkInput.value }, { silent: true }));
     const linkPreview = n.lien
       ? h('a', { class: 'note-link', href: normalizeUrl(n.lien), target: '_blank', rel: 'noopener', text: '↗ Ouvrir le lien' })
       : null;
 
+    const noteTa = h('textarea', { class: 'note-note', rows: 3, placeholder: 'Note personnelle…' });
+    noteTa.value = n.note;
+    const autoGrow = () => { noteTa.style.height = 'auto'; noteTa.style.height = noteTa.scrollHeight + 'px'; };
+    noteTa.addEventListener('input', () => { Store.update('ideas', n.id, { note: noteTa.value }, { silent: true }); autoGrow(); });
+    setTimeout(autoGrow, 0);
+
+    // médias (image collée/uploadée + dessin)
+    const media = h('div', { class: 'note-media' });
+    if (n.image) media.appendChild(h('img', { src: n.image, alt: 'image' }));
+    if (n.sketch) media.appendChild(h('img', { class: 'thumb-sketch', src: n.sketch, alt: 'dessin' }));
+
     // couleurs
     const swatches = h('div', { class: 'swatches' });
     NOTE_COLORS.forEach((c) => {
-      const sw = h('button', { class: 'swatch' + (c === n.color ? ' sel' : ''), style: `background:${c}`, title: 'Couleur',
-        onclick: () => Store.update('ideas', n.id, { color: c }) });
-      swatches.appendChild(sw);
+      swatches.appendChild(h('button', { class: 'swatch' + (c === n.color ? ' sel' : ''), style: `background:${c}`, title: 'Couleur',
+        onclick: () => Store.update('ideas', n.id, { color: c }) }));
     });
-    const del = h('button', { class: 'icon-btn danger', title: 'Supprimer', text: '🗑', onclick: async () => { if (await UI.confirm('Supprimer cette idée ?')) Store.remove('ideas', n.id); } });
+
+    const expand = h('button', { class: 'icon-btn', title: 'Agrandir / dessiner', text: '⤢', onclick: () => openIdeaEditor(n.id) });
+    const del = h('button', { class: 'icon-btn danger', title: 'Supprimer', text: '🗑',
+      onclick: async () => { if (await UI.confirm('Supprimer cette idée ?')) Store.remove('ideas', n.id); } });
 
     const card = h('div', { class: 'note', style: `background:${n.color || '#fff'}` },
-      [ref, linkInput, linkPreview, noteTa, h('div', { class: 'note-foot' }, [swatches, del])].filter(Boolean));
+      [ref, linkInput, linkPreview, media, noteTa, h('div', { class: 'note-foot' }, [swatches, h('div', { style: 'display:flex;gap:2px' }, [expand, del])])].filter(Boolean));
+
+    // coller une image directement sur la note
+    card.addEventListener('paste', async (e) => {
+      const item = Array.from(e.clipboardData?.items || []).find((it) => it.type.startsWith('image/'));
+      if (!item) return;
+      e.preventDefault();
+      try { const dataUrl = await UI.resizeImage(item.getAsFile(), 1000); Store.update('ideas', n.id, { image: dataUrl }); UI.toast('Image ajoutée ✓'); }
+      catch (err) { UI.toast('⚠️ Image illisible'); }
+    });
     return card;
+  }
+
+  /* --- éditeur plein écran d'une idée (image + dessin à la main) --- */
+  function openIdeaEditor(id) {
+    const n = Store.list('ideas').find((x) => x.id === id);
+    if (!n) return;
+
+    const ref = h('input', { class: 'big-input', placeholder: 'Référence / inspiration', value: n.ref });
+    ref.addEventListener('input', () => Store.update('ideas', id, { ref: ref.value }, { silent: true }));
+    const link = h('input', { class: 'field', style: 'width:100%', placeholder: '🔗 Lien (https://…)', value: n.lien });
+    link.addEventListener('input', () => Store.update('ideas', id, { lien: link.value }, { silent: true }));
+    const note = h('textarea', { class: 'field big-area', style: 'width:100%', placeholder: 'Note personnelle…' });
+    note.value = n.note;
+    note.addEventListener('input', () => Store.update('ideas', id, { note: note.value }, { silent: true }));
+
+    // --- bloc image ---
+    const imgBox = h('div', { class: 'editor-photo' });
+    function renderImg() {
+      imgBox.innerHTML = '';
+      const cur = Store.list('ideas').find((x) => x.id === id);
+      if (cur && cur.image) {
+        imgBox.appendChild(h('img', { src: cur.image, alt: 'image' }));
+        imgBox.appendChild(h('button', { class: 'btn btn-ghost btn-sm rm', text: '✕ Retirer', onclick: () => { Store.update('ideas', id, { image: '' }, { silent: true }); renderImg(); } }));
+      } else {
+        imgBox.appendChild(h('div', { class: 'ph-hint', html: '🖼️ Aucune image.<br>Colle une image (Ctrl/Cmd + V) ou' }));
+        imgBox.appendChild(h('button', { class: 'btn btn-ghost btn-sm', style: 'margin-top:8px', text: '📎 Choisir un fichier', onclick: () => fileIn.click() }));
+      }
+    }
+    const fileIn = h('input', { type: 'file', accept: 'image/*', hidden: true });
+    fileIn.addEventListener('change', async () => {
+      if (!fileIn.files[0]) return;
+      try { const d = await UI.resizeImage(fileIn.files[0], 1000); Store.update('ideas', id, { image: d }, { silent: true }); renderImg(); }
+      catch (e) { UI.toast('⚠️ Image illisible'); }
+    });
+    imgBox.appendChild(fileIn);
+    renderImg();
+
+    // --- zone de dessin ---
+    const pad = drawingPad(n);
+
+    const body = [
+      ref, link, note,
+      h('label', { class: 'form-row', style: 'gap:6px' }, [h('span', { style: 'font-size:12.5px;font-weight:650;color:var(--ink-soft)', text: 'Image' })]),
+      imgBox,
+      h('div', { style: 'font-size:12.5px;font-weight:650;color:var(--ink-soft);margin-top:4px', text: 'Écriture / dessin à la main ✍️' }),
+      pad.el,
+    ];
+
+    const close = UI.openModal({
+      title: 'Idée',
+      wide: true,
+      body,
+      footer: [h('button', { class: 'btn btn-primary', text: 'Terminé', onclick: () => close() })],
+      onClose: () => { App.render(); },
+    });
+
+    // coller une image dans l'éditeur
+    document.getElementById('modalHost').addEventListener('paste', async (e) => {
+      const item = Array.from(e.clipboardData?.items || []).find((it) => it.type.startsWith('image/'));
+      if (!item) return;
+      try { const d = await UI.resizeImage(item.getAsFile(), 1000); Store.update('ideas', id, { image: d }, { silent: true }); renderImg(); UI.toast('Image collée ✓'); }
+      catch (err) { UI.toast('⚠️ Image illisible'); }
+    });
+  }
+
+  /* --- carnet de dessin (pointeur + tactile) --- */
+  const PEN_COLORS = ['#2c2622', '#c26b7a', '#2a78d6', '#1baf7a', '#eb6834', '#4a3aa7'];
+  function drawingPad(n) {
+    const W = 680, Hg = 380;
+    const canvas = h('canvas', { class: 'pad' });
+    canvas.width = W; canvas.height = Hg;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, Hg);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    if (n.sketch) { const im = new Image(); im.onload = () => ctx.drawImage(im, 0, 0, W, Hg); im.src = n.sketch; }
+
+    let color = PEN_COLORS[0], erase = false, drawing = false, last = null;
+    const pos = (e) => {
+      const r = canvas.getBoundingClientRect();
+      const t = e.touches ? e.touches[0] : e;
+      return { x: (t.clientX - r.left) * (W / r.width), y: (t.clientY - r.top) * (Hg / r.height) };
+    };
+    const save = () => Store.update('ideas', n.id, { sketch: canvas.toDataURL('image/jpeg', 0.85) }, { silent: true });
+    const start = (e) => { drawing = true; last = pos(e); try { canvas.setPointerCapture(e.pointerId); } catch (_) {} if (e.cancelable) e.preventDefault(); };
+    const draw = (e) => {
+      if (!drawing) return;
+      const p = pos(e);
+      ctx.strokeStyle = erase ? '#ffffff' : color;
+      ctx.lineWidth = erase ? 20 : 3;
+      ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+      last = p; if (e.cancelable) e.preventDefault();
+    };
+    const end = () => { if (drawing) { drawing = false; save(); } };
+    canvas.addEventListener('pointerdown', start);
+    canvas.addEventListener('pointermove', draw);
+    canvas.addEventListener('pointerup', end);
+    canvas.addEventListener('pointercancel', end);
+
+    // outils
+    const colors = h('div', { class: 'pad-colors' });
+    const swEls = [];
+    PEN_COLORS.forEach((c) => {
+      const sw = h('button', { class: 'pad-color', style: `background:${c}`, title: 'Couleur',
+        onclick: () => { color = c; erase = false; refreshTools(); } });
+      swEls.push({ c, sw }); colors.appendChild(sw);
+    });
+    const eraser = h('button', { class: 'btn btn-ghost btn-sm', text: '🩹 Gomme', onclick: () => { erase = !erase; refreshTools(); } });
+    const clear = h('button', { class: 'btn btn-ghost btn-sm', text: '🗑 Effacer tout', onclick: async () => {
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, W, Hg); Store.update('ideas', n.id, { sketch: '' }, { silent: true });
+    } });
+    function refreshTools() {
+      swEls.forEach(({ c, sw }) => sw.classList.toggle('sel', c === color && !erase));
+      eraser.classList.toggle('btn-primary', erase);
+    }
+    refreshTools();
+
+    const tools = h('div', { class: 'pad-tools' }, [colors, eraser, clear]);
+    const el = h('div', {}, [tools, h('div', { class: 'pad-canvas-wrap' }, [canvas])]);
+    return { el };
   }
 
   function normalizeUrl(u) {
@@ -507,12 +746,16 @@ window.Sections = (function () {
     // détail par source (barres, tous mois confondus)
     const bySource = {};
     rows.forEach((r) => { if (r.source) bySource[r.source] = (bySource[r.source] || 0) + (Number(r.montant) || 0); });
-    const srcItems = Object.keys(bySource).map((k) => ({ label: k, value: bySource[k] })).sort((a, b) => b.value - a.value);
+    const srcColors = colorMap(Object.keys(bySource));
+    const srcItems = Object.keys(bySource)
+      .map((k) => ({ label: k, value: bySource[k], color: srcColors[k] }))
+      .sort((a, b) => b.value - a.value);
     const srcCard = h('div', { class: 'card card-pad', style: 'margin-top:18px' }, [h('div', { class: 'card-title', text: 'Détail par source de revenu' })]);
     const srcHost = h('div', { class: 'chart-wrap' });
     srcCard.appendChild(srcHost);
+    if (srcItems.length) Charts.legend(srcCard, srcItems.map((i) => ({ name: `${i.label} · ${fmt.money(i.value)}`, color: i.color })));
     root.appendChild(srcCard);
-    App.defer(() => Charts.bars(srcHost, { items: srcItems, color: 'var(--accent)', formatV: (v) => fmt.compact(v) + ' €', height: 240 }));
+    App.defer(() => Charts.bars(srcHost, { items: srcItems, formatV: (v) => fmt.compact(v) + ' €', height: 240 }));
 
     if (!raw.length) { root.appendChild(UI.empty('🪙', 'Ajoute ta première entrée de revenu.')); return root; }
 

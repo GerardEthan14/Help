@@ -11,6 +11,7 @@ window.Store = (function () {
   function defaultState() {
     return {
       settings: { title: 'Mon espace' },
+      shopCategories: ['Coloriages', 'Jeux', 'Éveil'],
       outreach: [],
       todos: [],
       social: [],
@@ -101,6 +102,28 @@ window.Store = (function () {
     commit();
   }
 
+  // --- catégories boutique ---
+  function categories() { return state.shopCategories || []; }
+  function addCategory(name) {
+    name = (name || '').trim();
+    if (name && !state.shopCategories.includes(name)) { state.shopCategories.push(name); commit(); }
+  }
+  function removeCategory(name) {
+    state.shopCategories = state.shopCategories.filter((c) => c !== name);
+    state.shop.forEach((p) => { if (p.categorie === name) p.categorie = ''; });
+    commit();
+  }
+  function renameCategory(oldN, newN) {
+    newN = (newN || '').trim();
+    if (!newN) return;
+    const i = state.shopCategories.indexOf(oldN);
+    if (i >= 0 && !state.shopCategories.includes(newN)) {
+      state.shopCategories[i] = newN;
+      state.shop.forEach((p) => { if (p.categorie === oldN) p.categorie = newN; });
+      commit();
+    }
+  }
+
   function subscribe(fn) { listeners.push(fn); return () => {
     const i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1);
   }; }
@@ -141,5 +164,6 @@ window.Store = (function () {
   return {
     get, list, add, update, remove, move,
     setSetting, subscribe, exportFile, importFile, uid,
+    categories, addCategory, removeCategory, renameCategory,
   };
 })();

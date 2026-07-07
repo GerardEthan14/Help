@@ -96,8 +96,15 @@ window.App = (function () {
       e.target.value = '';
     });
 
-    // ré-affichage à chaque changement de données
-    Store.subscribe(() => render());
+    // ré-affichage à chaque changement de données.
+    // On regroupe les rendus sur une frame (rAF) : ça coalesce les mises à jour
+    // et évite qu'un rendu déclenché par un « blur » n'avale le clic en cours.
+    let scheduled = false;
+    Store.subscribe(() => {
+      if (scheduled) return;
+      scheduled = true;
+      requestAnimationFrame(() => { scheduled = false; render(); });
+    });
 
     window.addEventListener('hashchange', render);
     render();
