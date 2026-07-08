@@ -303,11 +303,11 @@ tr.due td { background: var(--warn-soft) !important; }
   box-shadow: var(--shadow); border: 1px solid rgba(44,38,34,.06);
   display: flex; flex-direction: column; gap: 8px;
 }
-.note .note-ref { border: none; background: transparent; font-weight: 700; font-size: 15px; padding: 2px 3px; }
+.note .note-ref { border: none; background: transparent; font-weight: 700; font-size: 1.06em; padding: 2px 3px; }
 .note .note-ref:focus { outline: none; }
-.note .note-note { border: none; background: transparent; resize: none; font-size: 13.5px; line-height: 1.4; padding: 2px 3px; overflow: hidden; }
+.note .note-note { border: none; background: transparent; resize: none; font-size: 0.92em; line-height: 1.4; padding: 2px 3px; overflow: hidden; }
 .note .note-note:focus { outline: none; }
-.note .note-link { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; word-break: break-all; }
+.note .note-link { display: inline-flex; align-items: center; gap: 6px; font-size: 0.82em; word-break: break-all; }
 .note .note-foot { display: flex; align-items: center; gap: 6px; justify-content: space-between; margin-top: 2px; }
 .note .swatches { display: flex; gap: 5px; }
 .note .swatch { width: 15px; height: 15px; border-radius: 50%; border: 1px solid rgba(0,0,0,.12); }
@@ -321,7 +321,11 @@ tr.due td { background: var(--warn-soft) !important; }
   background-size: 22px 22px; overflow: auto; box-shadow: inset 0 1px 3px rgba(44,38,34,.03);
 }
 .note.free { position: absolute; width: 244px; margin: 0; padding: 0; overflow: hidden; }
-.note.free .note-body { padding: 12px 14px 4px; display: flex; flex-direction: column; gap: 8px; overflow: auto; flex: 1; }
+.note.free { cursor: default; }
+.note.free .note-body { padding: 12px 14px 4px; display: flex; flex-direction: column; gap: 8px; overflow: auto; flex: 1; font-size: 14px; }
+.board-free { cursor: grab; }
+.board-free.panning { cursor: grabbing; }
+.board-sizer { position: relative; }
 .note-grip {
   display: flex; align-items: center; justify-content: space-between;
   padding: 5px 8px 5px 10px; cursor: grab; user-select: none;
@@ -404,6 +408,27 @@ svg.chart { display: block; width: 100%; height: auto; }
 .reward-next { font-size: 13px; color: var(--ink-soft); margin-top: 9px; }
 .reward-next b { color: var(--accent-ink); }
 .reward-phrase { font-size: 13px; color: var(--accent-2); font-weight: 700; margin-top: 8px; }
+
+/* succès type Steam */
+.ach-cat { display: flex; align-items: baseline; gap: 10px; margin: 22px 0 12px; }
+.ach-cat-title { font-weight: 700; font-size: 15px; }
+.ach-cat-count { font-size: 12.5px; color: var(--muted); font-weight: 650; }
+.ach-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.ach-card { display: flex; align-items: center; gap: 12px; padding: 13px 15px; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); box-shadow: var(--shadow); position: relative; }
+.ach-card.locked { background: var(--surface-2); opacity: .72; }
+.ach-card.done { border-color: #e6c877; background: linear-gradient(135deg, #fff, #fdf6e6); }
+.ach-icon { font-size: 30px; line-height: 1; flex: 0 0 auto; filter: none; }
+.ach-card.locked .ach-icon { filter: grayscale(1); opacity: .7; }
+.ach-name { font-weight: 700; font-size: 14.5px; }
+.ach-desc { font-size: 12.5px; color: var(--ink-soft); margin-top: 1px; }
+.ach-badge { position: absolute; top: 10px; right: 12px; width: 22px; height: 22px; border-radius: 50%; background: var(--ok); color: #fff; display: grid; place-items: center; font-size: 13px; font-weight: 800; }
+
+/* checklist de lancement + idées produits */
+.check-list { display: flex; flex-direction: column; gap: 8px; }
+.check-row { display: flex; align-items: center; gap: 10px; }
+.check-row.done .todo-txt { text-decoration: line-through; color: var(--muted); }
+.pidea-list { display: flex; flex-direction: column; gap: 8px; }
+.pidea-row { display: flex; align-items: center; gap: 6px; }
 
 /* KPI tiles */
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-bottom: 18px; }

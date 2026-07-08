@@ -8,6 +8,11 @@ window.Store = (function () {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   }
 
+  function defaultLaunch() {
+    return ['Photos prises', 'Description écrite', 'Prix fixé', 'Mode de livraison choisi', 'Paiement en ligne configuré']
+      .map((label) => ({ id: uid(), label, done: false }));
+  }
+
   function defaultState() {
     return {
       settings: { title: 'Mon espace' },
@@ -21,12 +26,16 @@ window.Store = (function () {
       ideas: [],
       finances: [],
       socialNotes: [],
+      productIdeas: [],
+      launchChecklist: defaultLaunch(),
     };
   }
 
   // migration douce des anciennes données finances
   function migrate(s) {
     s.financeGoals = s.financeGoals || {};
+    s.productIdeas = s.productIdeas || [];
+    if (!s.launchChecklist) s.launchChecklist = defaultLaunch();
     (s.finances || []).forEach((e) => {
       if (e.date === undefined) e.date = e.mois ? e.mois + '-01' : '';
       if (e.categorie === undefined) e.categorie = e.source || '';

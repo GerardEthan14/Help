@@ -434,7 +434,18 @@ window.Sections = (function () {
     ]);
     root.appendChild(UI.pageHead('🛍️', 'Boutique', 'Ton classeur produits, rangé par catégorie — prêt pour octobre.', actions));
 
-    // onglets catégories
+    // bascule édition / aperçu / préparation
+    const seg = h('div', { class: 'seg', style: 'margin-bottom:16px' }, [
+      segBtn('✏️ Édition', vs.shop.view === 'edit', () => { vs.shop.view = 'edit'; App.render(); }),
+      segBtn('👁️ Aperçu boutique', vs.shop.view === 'preview', () => { vs.shop.view = 'preview'; App.render(); }),
+      segBtn('🚀 Préparation', vs.shop.view === 'prep', () => { vs.shop.view = 'prep'; App.render(); }),
+    ]);
+    root.appendChild(seg);
+
+    // mode préparation : checklist de lancement + idées de futurs produits
+    if (vs.shop.view === 'prep') { root.appendChild(prepView()); return root; }
+
+    // onglets catégories (masqués en préparation)
     const tabs = h('div', { class: 'tabs' });
     const countAll = products.length;
     tabs.appendChild(tab('Tous', countAll, vs.shop.cat === 'all', () => { vs.shop.cat = 'all'; App.render(); }));
@@ -444,13 +455,6 @@ window.Sections = (function () {
     });
     tabs.appendChild(h('button', { class: 'tab tab-manage', text: '⚙️ Gérer', title: 'Ajouter / renommer / supprimer une catégorie', onclick: manageCategories }));
     root.appendChild(tabs);
-
-    // bascule édition / aperçu vitrine
-    const seg = h('div', { class: 'seg', style: 'margin-bottom:16px' }, [
-      segBtn('✏️ Édition', vs.shop.view === 'edit', () => { vs.shop.view = 'edit'; App.render(); }),
-      segBtn('👁️ Aperçu boutique', vs.shop.view === 'preview', () => { vs.shop.view = 'preview'; App.render(); }),
-    ]);
-    root.appendChild(seg);
 
     // produits filtrés
     const filtered = vs.shop.cat === 'all' ? products : products.filter((p) => p.categorie === vs.shop.cat);
@@ -476,6 +480,57 @@ window.Sections = (function () {
     return h('button', { class: 'tab' + (active ? ' active' : ''), onclick }, [
       document.createTextNode(label), h('span', { class: 'count', text: String(count) }),
     ]);
+  }
+
+  // --- mode préparation ---
+  function prepView() {
+    const wrap = h('div');
+    wrap.appendChild(h('p', { class: 'sub', style: 'margin:-4px 0 14px', text: 'Prépare ta boutique en douceur pour octobre : coche les étapes et garde toutes tes idées au chaud. 🌷' }));
+    wrap.appendChild(h('div', { class: 'grid-2' }, [launchCard(), productIdeasCard()]));
+    return wrap;
+  }
+
+  function launchCard() {
+    const items = Store.list('launchChecklist');
+    const done = items.filter((i) => i.done).length;
+    const pct = items.length ? Math.round((done / items.length) * 100) : 0;
+    const card = h('div', { class: 'card card-pad' });
+    card.appendChild(h('div', { class: 'card-title' }, [document.createTextNode('🚀 Checklist de lancement')]));
+    card.appendChild(h('div', { class: 'progress-track', style: 'margin:12px 0 6px' }, [h('div', { class: 'progress-fill', style: `width:${pct}%` })]));
+    card.appendChild(h('div', { class: 'sub', style: 'margin:0 0 14px', text: `${done}/${items.length} étape${items.length > 1 ? 's' : ''} prête${done > 1 ? 's' : ''}` }));
+    const list = h('div', { class: 'check-list' });
+    items.forEach((it) => list.appendChild(launchItem(it)));
+    card.appendChild(list);
+    card.appendChild(h('button', { class: 'btn btn-ghost btn-sm', style: 'margin-top:14px', text: '+ Ajouter une étape', onclick: async () => { const l = await UI.prompt('Nouvelle étape de lancement', '', 'Ajouter'); if (l) Store.add('launchChecklist', { label: l, done: false }); } }));
+    return card;
+  }
+  function launchItem(it) {
+    const chk = h('input', { class: 'check', type: 'checkbox' }); chk.checked = it.done;
+    chk.addEventListener('change', () => Store.update('launchChecklist', it.id, { done: chk.checked }));
+    const label = h('input', { class: 'todo-txt', value: it.label, placeholder: 'Étape…' });
+    label.addEventListener('input', () => Store.update('launchChecklist', it.id, { label: label.value }, { silent: true }));
+    const del = h('button', { class: 'icon-btn danger', title: 'Supprimer', text: '🗑', onclick: () => Store.remove('launchChecklist', it.id) });
+    return h('div', { class: 'check-row' + (it.done ? ' done' : '') }, [chk, label, del]);
+  }
+
+  function productIdeasCard() {
+    const ideas = Store.list('productIdeas');
+    const card = h('div', { class: 'card card-pad' });
+    card.appendChild(h('div', { class: 'card-title' }, [document.createTextNode('💭 Idées de futurs produits')]));
+    card.appendChild(h('p', { class: 'sub', style: 'margin:2px 0 12px', text: 'Une liste brute d’idées pas encore développées — pour ne jamais perdre l’inspiration.' }));
+    card.appendChild(h('button', { class: 'btn btn-ghost btn-sm', style: 'margin-bottom:12px', text: '+ Nouvelle idée produit', onclick: () => Store.add('productIdeas', { text: '' }) }));
+    if (!ideas.length) { card.appendChild(h('p', { class: 'sub', style: 'margin:0', text: 'Note ici tous tes futurs produits en vrac 🎨' })); return card; }
+    const list = h('div', { class: 'pidea-list' });
+    ideas.forEach((pi) => list.appendChild(productIdeaRow(pi)));
+    card.appendChild(list);
+    return card;
+  }
+  function productIdeaRow(pi) {
+    const inp = h('input', { class: 'field', style: 'flex:1', placeholder: 'Ex : carnet de coloriage de Noël', value: pi.text });
+    inp.addEventListener('input', () => Store.update('productIdeas', pi.id, { text: inp.value }, { silent: true }));
+    const toProduct = h('button', { class: 'icon-btn', title: 'Transformer en produit', text: '🛍️', onclick: () => { Store.add('shop', { nom: pi.text, prix: 0, statut: 'En préparation', stock: '', photo: '', categorie: '' }); Store.remove('productIdeas', pi.id); UI.toast('Ajouté à tes produits ✓'); } });
+    const del = h('button', { class: 'icon-btn danger', title: 'Supprimer', text: '🗑', onclick: () => Store.remove('productIdeas', pi.id) });
+    return h('div', { class: 'pidea-row' }, [inp, toProduct, del]);
   }
 
   // vitrine (lecture seule, comme la vraie boutique)
@@ -611,22 +666,36 @@ window.Sections = (function () {
           x: 24 + (k % 6) * 34, y: 24 + (k % 6) * 30, w: 244, z: ++topZ });
       },
     });
-    root.appendChild(UI.pageHead('💡', 'Idées', 'Ton tableau blanc : déplace, redimensionne, colle des images et dessine.', addBtn));
-    root.appendChild(h('p', { class: 'sub board-hint', style: 'margin:-8px 0 12px', html: '✋ Déplace un post-it par sa <b>poignée ⠿</b> (en haut), redimensionne-le par le <b>coin ↘</b>, et clique <b>⤢</b> pour dessiner / coller une image.' }));
+    root.appendChild(UI.pageHead('💡', 'Idées', 'Ton grand tableau blanc : déplace, redimensionne, colle des images et dessine.', addBtn));
+    root.appendChild(h('p', { class: 'sub board-hint', style: 'margin:-8px 0 12px', html: '✋ Déplace un post-it par sa <b>poignée ⠿</b>, redimensionne par le <b>coin ↘</b>, clique <b>⤢</b> pour dessiner. Glisse le <b>fond</b> pour te déplacer dans le tableau.' }));
 
     if (!notes.length) { root.appendChild(UI.empty('🧠', 'Colle ta première idée sur le tableau !')); return root; }
 
-    let maxR = 900, maxB = 520;
-    const sizer = h('div', { style: 'position:relative' });
+    // grand canevas (on peut naviguer dedans) — au moins 2400×1600, plus si besoin
+    let maxR = 2400, maxB = 1600;
+    const sizer = h('div', { class: 'board-sizer' });
     notes.forEach((n, i) => {
       sizer.appendChild(noteCard(n, i));
       const x = n.x ?? fallbackX(i), y = n.y ?? fallbackY(i);
-      maxR = Math.max(maxR, x + (n.w || 244) + 40);
-      maxB = Math.max(maxB, y + (n.h || 240) + 40);
+      maxR = Math.max(maxR, x + (n.w || 244) + 200);
+      maxB = Math.max(maxB, y + (n.h || 240) + 200);
     });
     sizer.style.width = maxR + 'px';
     sizer.style.height = maxB + 'px';
-    root.appendChild(h('div', { class: 'board-free', style: 'height:74vh' }, [sizer]));
+
+    const board = h('div', { class: 'board-free', style: 'height:76vh' }, [sizer]);
+    // navigation : glisser le fond pour se déplacer dans le tableau
+    board.addEventListener('pointerdown', (e) => {
+      if (e.target !== board && e.target !== sizer) return; // uniquement le fond
+      board.setPointerCapture(e.pointerId);
+      board.classList.add('panning');
+      const sx = e.clientX, sy = e.clientY, sl = board.scrollLeft, st = board.scrollTop;
+      const move = (ev) => { board.scrollLeft = sl - (ev.clientX - sx); board.scrollTop = st - (ev.clientY - sy); };
+      const up = () => { board.removeEventListener('pointermove', move); board.removeEventListener('pointerup', up); board.classList.remove('panning'); };
+      board.addEventListener('pointermove', move);
+      board.addEventListener('pointerup', up);
+    });
+    root.appendChild(board);
     return root;
   }
 
@@ -634,17 +703,17 @@ window.Sections = (function () {
     const ref = h('input', { class: 'note-ref', placeholder: 'Référence / inspiration', value: n.ref });
     ref.addEventListener('input', () => Store.update('ideas', n.id, { ref: ref.value }, { silent: true }));
 
-    const linkInput = h('input', { class: 'note-ref', style: 'font-weight:500;font-size:12.5px', placeholder: '🔗 Lien (https://…)', value: n.lien });
+    const linkInput = h('input', { class: 'note-ref', style: 'font-weight:500;font-size:0.82em', placeholder: '🔗 Lien (https://…)', value: n.lien });
     linkInput.addEventListener('input', () => Store.update('ideas', n.id, { lien: linkInput.value }, { silent: true }));
     const linkPreview = n.lien
       ? h('a', { class: 'note-link', href: normalizeUrl(n.lien), target: '_blank', rel: 'noopener', text: '↗ Ouvrir le lien' })
       : null;
 
-    const noteTa = h('textarea', { class: 'note-note', rows: 3, placeholder: 'Note personnelle…' });
+    const noteTa = h('textarea', { class: 'note-note', rows: 2, placeholder: 'Note personnelle…' });
     noteTa.value = n.note;
-    const autoGrow = () => { noteTa.style.height = 'auto'; noteTa.style.height = noteTa.scrollHeight + 'px'; };
-    noteTa.addEventListener('input', () => { Store.update('ideas', n.id, { note: noteTa.value }, { silent: true }); autoGrow(); });
-    setTimeout(autoGrow, 0);
+    noteTa.addEventListener('input', () => { Store.update('ideas', n.id, { note: noteTa.value }, { silent: true }); refit(); });
+    ref.addEventListener('input', refit);
+    linkInput.addEventListener('input', refit);
 
     // médias (image collée/uploadée + dessin)
     const media = h('div', { class: 'note-media' });
@@ -704,7 +773,8 @@ window.Sections = (function () {
       const sw = card.offsetWidth, sh = card.offsetHeight, sx = e.clientX, sy = e.clientY;
       const move = (ev) => {
         card.style.width = Math.max(184, sw + ev.clientX - sx) + 'px';
-        card.style.height = Math.max(150, sh + ev.clientY - sy) + 'px';
+        card.style.height = Math.max(120, sh + ev.clientY - sy) + 'px';
+        refit(); // police adaptative : tout reste visible en réduisant
       };
       const up = () => {
         resize.removeEventListener('pointermove', move); resize.removeEventListener('pointerup', up);
@@ -713,6 +783,17 @@ window.Sections = (function () {
       resize.addEventListener('pointermove', move);
       resize.addEventListener('pointerup', up);
     });
+
+    // police adaptative : ajuste la taille du texte pour tout voir quand la note est réduite
+    function autoGrow() { noteTa.style.height = 'auto'; noteTa.style.height = noteTa.scrollHeight + 'px'; }
+    function refit() {
+      body.style.fontSize = '14px';
+      autoGrow();
+      if (!card.style.height) return; // hauteur libre : pas de contrainte
+      let fs = 14, guard = 0;
+      while (body.scrollHeight > body.clientHeight + 1 && fs > 8 && guard < 60) { fs -= 0.5; body.style.fontSize = fs + 'px'; autoGrow(); guard++; }
+    }
+    App.defer(refit);
 
     // coller une image directement sur la note
     card.addEventListener('paste', async (e) => {
@@ -997,86 +1078,148 @@ window.Sections = (function () {
   function uniqueSorted(arr) { return Array.from(new Set(arr)).sort((a, b) => a.localeCompare(b)); }
 
   /* =========================================================
-     7) RÉCOMPENSES (badges & paliers)
+     7) RÉCOMPENSES (succès type Steam)
      ========================================================= */
-  const MEDALS = ['🥉', '🥈', '🥇', '🏆', '💎', '👑', '🌟'];
-  const REWARD_PHRASES = [
-    'Continue comme ça, tu gères ! 💪', 'Chaque petit pas compte 🌱', 'Tu es sur la bonne voie ✨',
-    'La régularité paie 🔥', 'Fière de toi 💛', 'Un palier à la fois, tu y arrives 🚀',
-  ];
+  function rewardData() {
+    const outreach = Store.list('outreach');
+    const todos = Store.list('todos');
+    const social = Store.list('social');
+    const shop = Store.list('shop');
+    const ideas = Store.list('ideas');
+    const fin = Store.list('finances');
+    const socialNotes = Store.list('socialNotes');
+    const productIdeas = Store.list('productIdeas');
+    const launch = Store.list('launchChecklist');
+
+    const entries = fin.map((e) => Object.assign({}, e, { mois: (e.date || '').slice(0, 7) || e.mois || '' }));
+    const months = Array.from(new Set(entries.map((e) => e.mois).filter(Boolean)));
+    const goalHit = months.some((m) => { const ca = entries.filter((e) => e.mois === m).reduce((s, e) => s + (+e.montant || 0), 0); const g = Store.getGoal(m); return g > 0 && ca >= g; });
+    const revenueCats = new Set(entries.filter((e) => (+e.montant || 0) > 0 && e.categorie).map((e) => e.categorie));
+
+    const sectionsUsed = [outreach.length, todos.length, social.length, shop.length, ideas.length, fin.length].filter((n) => n > 0).length;
+
+    return {
+      contacts: outreach.length,
+      accepted: outreach.filter((o) => o.statut === 'Accepté').length,
+      discussion: outreach.filter((o) => o.statut === 'En discussion').length,
+      relance: outreach.filter((o) => o.statut === 'Relancé').length,
+      doneTasks: todos.filter((t) => t.done).length,
+      urgentDone: todos.some((t) => t.done && t.urgent),
+      allTasksDone: todos.length >= 3 && todos.every((t) => t.done),
+      peakFollowers: social.reduce((mx, r) => Math.max(mx, (+r.instagram || 0) + (+r.tiktok || 0) + (+r.threads || 0)), 0),
+      monthsTracked: social.length,
+      contentIdeas: socialNotes.length,
+      products: shop.length,
+      onlineProducts: shop.filter((p) => p.statut === 'En ligne').length,
+      productsWithPhoto: shop.filter((p) => p.photo).length,
+      productIdeas: productIdeas.length,
+      launchDone: launch.length > 0 && launch.every((i) => i.done),
+      revenue: entries.reduce((s, e) => s + (+e.montant || 0), 0),
+      goalHit,
+      revenueCats: revenueCats.size,
+      ideas: ideas.length,
+      hasSketch: ideas.some((i) => i.sketch),
+      hasImage: ideas.some((i) => i.image),
+      sectionsUsed,
+    };
+  }
+
+  function achievementGroups(D) {
+    return [
+      { cat: '📮 Démarchage', items: [
+        { icon: '🌱', name: 'Premier contact', desc: 'Ajoute ton 1er contact de démarchage', done: D.contacts >= 1 },
+        { icon: '📇', name: 'Carnet d’adresses', desc: 'Démarche 10 contacts', done: D.contacts >= 10 },
+        { icon: '💬', name: 'En pourparlers', desc: 'Aie un contact « En discussion »', done: D.discussion >= 1 },
+        { icon: '💪', name: 'On lâche rien', desc: 'Relance un contact', done: D.relance >= 1 },
+        { icon: '🤝', name: 'Ça matche !', desc: 'Décroche une réponse positive', done: D.accepted >= 1 },
+        { icon: '🎉', name: 'Recherchée', desc: 'Décroche 5 réponses positives', done: D.accepted >= 5 },
+      ] },
+      { cat: '✅ Organisation', items: [
+        { icon: '☑️', name: 'C’est coché', desc: 'Termine ta 1re tâche', done: D.doneTasks >= 1 },
+        { icon: '🧹', name: 'Grand ménage', desc: 'Termine 10 tâches', done: D.doneTasks >= 10 },
+        { icon: '🏅', name: 'Machine à cocher', desc: 'Termine 50 tâches', done: D.doneTasks >= 50 },
+        { icon: '🚒', name: 'Pompier', desc: 'Termine une tâche urgente 🚨', done: D.urgentDone },
+        { icon: '🎯', name: 'Journée parfaite', desc: 'Coche toutes tes tâches (min. 3)', done: D.allTasksDone },
+      ] },
+      { cat: '📱 Réseaux', items: [
+        { icon: '👋', name: 'Première communauté', desc: 'Atteins 100 abonnés (pic)', done: D.peakFollowers >= 100 },
+        { icon: '🌟', name: 'Mille mercis', desc: 'Atteins 1 000 abonnés', done: D.peakFollowers >= 1000 },
+        { icon: '🚀', name: 'Star montante', desc: 'Atteins 5 000 abonnés', done: D.peakFollowers >= 5000 },
+        { icon: '🎬', name: 'Boîte à idées', desc: 'Note 5 idées de contenu', done: D.contentIdeas >= 5 },
+      ] },
+      { cat: '🛍️ Boutique', items: [
+        { icon: '✨', name: 'Première création', desc: 'Ajoute ton 1er produit', done: D.products >= 1 },
+        { icon: '🏪', name: 'Petite boutique', desc: 'Prépare 5 produits', done: D.products >= 5 },
+        { icon: '📸', name: 'Shooting photo', desc: 'Ajoute une photo à 3 produits', done: D.productsWithPhoto >= 3 },
+        { icon: '🟢', name: 'En ligne !', desc: 'Mets un produit « En ligne »', done: D.onlineProducts >= 1 },
+        { icon: '💭', name: 'Pleine d’idées', desc: 'Note 3 idées de futurs produits', done: D.productIdeas >= 3 },
+        { icon: '🚀', name: 'Prête pour octobre', desc: 'Complète la checklist de lancement', done: D.launchDone },
+      ] },
+      { cat: '💰 Finances', items: [
+        { icon: '💶', name: 'Premier euro', desc: 'Enregistre ta 1re rentrée d’argent', done: D.revenue > 0 },
+        { icon: '💰', name: 'Cap des 500 €', desc: 'Atteins 500 € cumulés', done: D.revenue >= 500 },
+        { icon: '🤑', name: 'Cap des 1 000 €', desc: 'Atteins 1 000 € cumulés', done: D.revenue >= 1000 },
+        { icon: '🎯', name: 'Objectif atteint', desc: 'Atteins ton objectif sur un mois', done: D.goalHit },
+        { icon: '🌈', name: 'Revenus variés', desc: 'Gagne dans 3 catégories différentes', done: D.revenueCats >= 3 },
+      ] },
+      { cat: '💡 Créativité', items: [
+        { icon: '💡', name: 'Étincelle', desc: 'Colle ta 1re idée sur le tableau', done: D.ideas >= 1 },
+        { icon: '🎨', name: 'Tableau vivant', desc: 'Colle 10 idées', done: D.ideas >= 10 },
+        { icon: '✍️', name: 'Artiste', desc: 'Dessine à la main sur une idée', done: D.hasSketch },
+        { icon: '🖼️', name: 'Moodboard', desc: 'Ajoute une image à une idée', done: D.hasImage },
+      ] },
+      { cat: '⭐ Spécial', items: [
+        { icon: '🧭', name: 'Exploratrice', desc: 'Utilise 3 espaces différents', done: D.sectionsUsed >= 3 },
+        { icon: '🌸', name: 'Tout un univers', desc: 'Utilise les 6 espaces', done: D.sectionsUsed >= 6 },
+      ] },
+    ];
+  }
 
   function rewards() {
     const root = h('div');
-    root.appendChild(UI.pageHead('🏆', 'Récompenses', 'Tes petits trophées à débloquer — un peu de fun et de motivation ! 🎉'));
+    root.appendChild(UI.pageHead('🏆', 'Succès', 'Tes succès à débloquer, comme dans un jeu — un peu de fun et de motivation ! 🎮'));
 
-    const social = Store.list('social');
-    const peakFollowers = social.reduce((mx, r) => Math.max(mx, (Number(r.instagram) || 0) + (Number(r.tiktok) || 0) + (Number(r.threads) || 0)), 0);
-    const totalRevenue = Store.list('finances').reduce((s, e) => s + (Number(e.montant) || 0), 0);
-    const doneTasks = Store.list('todos').filter((t) => t.done).length;
-    const contacts = Store.list('outreach').length;
-    const accepted = Store.list('outreach').filter((o) => o.statut === 'Accepté').length;
-    const products = Store.list('shop').length;
-    const ideasN = Store.list('ideas').length;
+    const D = rewardData();
+    const groups = achievementGroups(D);
+    const all = groups.flatMap((g) => g.items);
+    const earned = all.filter((a) => a.done).length;
+    const total = all.length;
+    const pct = Math.round((earned / total) * 100);
 
-    const groups = [
-      { emoji: '📱', title: 'Abonnés (pic)', value: peakFollowers, fmt: (v) => fmt.num(v) + ' abonnés', tiers: [100, 250, 500, 1000, 2500, 5000, 10000] },
-      { emoji: '💰', title: 'Revenus cumulés', value: totalRevenue, fmt: (v) => fmt.money(v), tiers: [50, 100, 250, 500, 1000, 2500, 5000] },
-      { emoji: '✅', title: 'Tâches terminées', value: doneTasks, fmt: (v) => v + ' tâches', tiers: [1, 5, 10, 25, 50, 100] },
-      { emoji: '📮', title: 'Contacts démarchés', value: contacts, fmt: (v) => v + ' contacts', tiers: [1, 5, 10, 25, 50] },
-      { emoji: '🤝', title: 'Réponses positives', value: accepted, fmt: (v) => v + ' accepté' + (v > 1 ? 's' : ''), tiers: [1, 3, 5, 10, 20] },
-      { emoji: '🛍️', title: 'Produits créés', value: products, fmt: (v) => v + ' produits', tiers: [1, 5, 10, 20] },
-      { emoji: '💡', title: 'Idées notées', value: ideasN, fmt: (v) => v + ' idées', tiers: [1, 5, 10, 25] },
-    ];
-
-    const earned = groups.reduce((s, g) => s + g.tiers.filter((t) => g.value >= t).length, 0);
-    const total = groups.reduce((s, g) => s + g.tiers.length, 0);
-    const heroPhrase = earned === 0 ? 'C’est le début de l’aventure — ton premier trophée t’attend ! 🌱'
-      : earned >= total ? 'Incroyable, tu as absolument tout débloqué ! 👑🎉'
-        : `Déjà ${earned} trophée${earned > 1 ? 's' : ''} débloqué${earned > 1 ? 's' : ''} — tu assures ! 💪`;
+    const heroPhrase = earned === 0 ? 'C’est le début de l’aventure — ton premier succès t’attend ! 🌱'
+      : earned >= total ? 'Légendaire ! Tu as débloqué absolument tous les succès 👑🎉'
+        : `${earned} succès débloqué${earned > 1 ? 's' : ''} — tu assures, continue ! 💪`;
     root.appendChild(h('div', { class: 'reward-hero' }, [
       h('div', { class: 'trophy', text: '🏆' }),
-      h('div', {}, [
-        h('div', { class: 'h-num', text: `${earned} / ${total} trophées` }),
+      h('div', { style: 'flex:1;min-width:200px' }, [
+        h('div', { class: 'h-num', text: `${earned} / ${total} succès` }),
         h('div', { class: 'h-phrase', text: heroPhrase }),
+        h('div', { class: 'progress-track', style: 'margin-top:10px;max-width:360px' }, [h('div', { class: 'progress-fill', style: `width:${pct}%` })]),
       ]),
     ]));
 
-    const grid = h('div', { class: 'reward-grid' });
-    groups.forEach((g, gi) => grid.appendChild(rewardCard(g, gi)));
-    root.appendChild(grid);
+    groups.forEach((g) => {
+      const done = g.items.filter((a) => a.done).length;
+      root.appendChild(h('div', { class: 'ach-cat' }, [
+        h('span', { class: 'ach-cat-title', text: g.cat }),
+        h('span', { class: 'ach-cat-count', text: `${done}/${g.items.length}` }),
+      ]));
+      const grid = h('div', { class: 'ach-grid' });
+      g.items.forEach((a) => grid.appendChild(achievementCard(a)));
+      root.appendChild(grid);
+    });
     return root;
   }
 
-  function rewardCard(g, gi) {
-    const unlocked = g.tiers.filter((t) => g.value >= t).length;
-    const next = g.tiers.find((t) => g.value < t);
-    const chips = h('div', { class: 'tier-row' }, g.tiers.map((t, i) => {
-      const on = g.value >= t;
-      return h('span', { class: 'tier-chip' + (on ? ' unlocked' : ''), title: on ? 'Débloqué !' : 'À débloquer' }, [
-        document.createTextNode(on ? MEDALS[i % MEDALS.length] : '🔒'),
-        document.createTextNode(' ' + g.fmt(t).replace(/\s?abonnés|\s?tâches|\s?contacts|\s?accepté.?|\s?produits|\s?idées/,'')),
-      ]);
-    }));
-
-    let progress = null;
-    if (next) {
-      const prev = [...g.tiers].reverse().find((t) => g.value >= t) || 0;
-      const pct = Math.max(4, Math.min(100, Math.round(((g.value - prev) / (next - prev)) * 100)));
-      progress = h('div', {}, [
-        h('div', { class: 'progress-track', style: 'height:9px' }, [h('div', { class: 'progress-fill', style: `width:${pct}%` })]),
-        h('div', { class: 'reward-next', html: `Plus que <b>${g.fmt(next - g.value)}</b> pour débloquer le prochain palier ${MEDALS[unlocked % MEDALS.length]}` }),
-      ]);
-    } else {
-      progress = h('div', { class: 'reward-next', text: '🎉 Bravo, tous les paliers sont atteints !' });
-    }
-
-    return h('div', { class: 'reward-card' }, [
-      h('div', { class: 'reward-head' }, [h('span', { class: 'r-emoji', text: g.emoji }), h('span', { class: 'r-title', text: g.title })]),
-      h('div', { class: 'reward-val', text: g.fmt(g.value) }),
-      chips,
-      progress,
-      h('div', { class: 'reward-phrase', text: REWARD_PHRASES[(gi + unlocked) % REWARD_PHRASES.length] }),
-    ]);
+  function achievementCard(a) {
+    return h('div', { class: 'ach-card' + (a.done ? ' done' : ' locked') }, [
+      h('div', { class: 'ach-icon', text: a.done ? a.icon : '🔒' }),
+      h('div', { class: 'ach-body' }, [
+        h('div', { class: 'ach-name', text: a.name }),
+        h('div', { class: 'ach-desc', text: a.desc }),
+      ]),
+      a.done ? h('div', { class: 'ach-badge', text: '✓' }) : null,
+    ].filter(Boolean));
   }
 
   return { outreach, todo, social, shop, ideas, finances, rewards };
