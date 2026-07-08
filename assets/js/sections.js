@@ -134,11 +134,11 @@ window.Sections = (function () {
     const txt = (row.notes || '').trim();
     const short = txt ? (txt.length > 32 ? txt.slice(0, 32) + '…' : txt) : '';
     return h('button', {
-      class: 'note-cell' + (txt ? '' : ' empty'),
+      class: 'note-cell' + (txt ? '' : ' is-empty'),
       title: txt ? 'Voir / modifier la note' : 'Ajouter une note',
       onclick: () => openNoteEditor(row.id),
     }, [
-      h('span', { text: txt ? '📝' : '＋' }),
+      h('span', { class: 'note-cell-ico', text: txt ? '📝' : '+' }),
       h('span', { class: 'note-cell-txt', text: txt ? short : 'Ajouter une note' }),
     ]);
   }
