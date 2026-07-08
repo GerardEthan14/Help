@@ -10,10 +10,11 @@ Tout fonctionne **dans le navigateur**, sans compte ni connexion : tes données 
 |--------|----------------|
 | 📮 **Démarchage** | Suivre tes prises de contact (éditions, jeux, marques) : nom, type, pays, contact, date d'envoi, relance, statut, notes. Les relances à faire sont surlignées. Recherche et filtres inclus. |
 | ✅ **To-do** | Liste de tâches avec cases à cocher, **barre de progression**, marquage **urgent 🚨**, échéances et **vue calendrier** par mois. |
-| 📱 **Réseaux** | Abonnés par réseau (Instagram / TikTok / Threads) chaque mois, **évolution en %** et **courbe de croissance**. |
-| 🛍️ **Boutique** | Tes produits : nom, prix, statut (en préparation / en ligne), stock et **photo**. |
-| 💡 **Idées** | Un **tableau blanc** de notes colorées : référence / inspiration, lien et note personnelle. |
-| 💰 **Finances** | Revenus par mois et par source, objectifs, **graphique d'évolution du CA** et détail par source. |
+| 📱 **Réseaux** | Abonnés par réseau (Instagram / TikTok / Threads) chaque mois, **évolution en %**, **courbe de croissance** et un **espace notes** dédié aux idées de contenu (vidéos / posts). |
+| 🛍️ **Boutique** | Tes produits classés par **catégories** (onglets), avec nom, prix, statut, stock, **photo**, **aperçu vitrine** et réorganisation par glisser-déposer. |
+| 💡 **Idées** | Un **tableau blanc** libre : notes déplaçables et redimensionnables, images (coller / uploader), dessin à la main. |
+| 💰 **Finances** | **Jauge d'objectif du mois** (modifiable), **rentrées d'argent** détaillées (client, montant, date, catégorie), **graphique d'évolution du CA** et détail par catégorie. |
+| 🏆 **Récompenses** | Des **badges par paliers** (abonnés, revenus, tâches, contacts…) avec trophées à débloquer et phrases de motivation. |
 
 ## Utilisation
 

@@ -345,6 +345,7 @@ window.Sections = (function () {
 
     if (!raw.length) {
       root.appendChild(UI.empty('📈', 'Ajoute un premier mois pour démarrer le suivi.'));
+      root.appendChild(contentNotesCard());
       return root;
     }
 
@@ -365,7 +366,30 @@ window.Sections = (function () {
     });
     tableCard.appendChild(table);
     root.appendChild(tableCard);
+    root.appendChild(contentNotesCard());
     return root;
+  }
+
+  // espace notes dédié aux réseaux (idées de vidéos / posts)
+  function contentNotesCard() {
+    const notes = Store.list('socialNotes');
+    const card = h('div', { class: 'card card-pad', style: 'margin-top:18px' });
+    card.appendChild(h('div', { class: 'card-title' }, [document.createTextNode('💡 Idées de contenu '), h('span', { class: 'muted', style: 'font-weight:500;font-size:13px', text: '· vidéos, posts, collabs…' })]));
+    card.appendChild(h('button', { class: 'btn btn-ghost btn-sm', style: 'margin:6px 0 14px', text: '+ Nouvelle idée de contenu', onclick: () => Store.add('socialNotes', { text: '' }) }));
+    if (!notes.length) { card.appendChild(h('p', { class: 'sub', style: 'margin:0', text: 'Note ici tes idées de vidéos, de posts, de collabs… un espace rien que pour tes réseaux.' })); return card; }
+    const grid = h('div', { class: 'content-notes' });
+    notes.forEach((n) => grid.appendChild(contentNote(n)));
+    card.appendChild(grid);
+    return card;
+  }
+  function contentNote(n) {
+    const ta = h('textarea', { class: 'content-note-ta', placeholder: 'Idée de vidéo / post…' });
+    ta.value = n.text || '';
+    const grow = () => { ta.style.height = 'auto'; ta.style.height = ta.scrollHeight + 'px'; };
+    ta.addEventListener('input', () => { Store.update('socialNotes', n.id, { text: ta.value }, { silent: true }); grow(); });
+    setTimeout(grow, 0);
+    const del = h('button', { class: 'icon-btn danger', title: 'Supprimer', text: '🗑', onclick: () => Store.remove('socialNotes', n.id) });
+    return h('div', { class: 'content-note' }, [ta, h('div', { class: 'content-note-foot' }, [del])]);
   }
 
   function evoCell(rows, r) {
@@ -828,97 +852,232 @@ window.Sections = (function () {
   /* =========================================================
      6) FINANCES
      ========================================================= */
+  function monthName(ym) {
+    if (!ym) return '';
+    const [y, m] = ym.split('-').map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+  }
+  function formRow(label, input) { return h('div', { class: 'form-row' }, [h('label', { text: label }), input]); }
+
   function finances() {
     const raw = Store.list('finances');
-    const rows = raw.slice().sort((a, b) => (a.mois || '').localeCompare(b.mois || ''));
+    const cats = Store.financeCategories();
     const root = h('div');
+    const selMonth = vs.finances.month || fmt.thisMonth();
 
-    const addBtn = h('button', {
-      class: 'btn btn-primary', text: '+ Ajouter une entrée',
-      onclick: () => Store.add('finances', { mois: fmt.thisMonth(), source: '', montant: 0, objectif: 0 }),
-    });
-    root.appendChild(UI.pageHead('💰', 'Finances', 'Revenus par mois et par source, avec objectifs.', addBtn));
-
-    // agrégats par mois
-    const months = uniqueSorted(rows.map((r) => r.mois).filter(Boolean));
-    const caByMonth = {}, objByMonth = {};
-    months.forEach((m) => {
-      caByMonth[m] = rows.filter((r) => r.mois === m).reduce((s, r) => s + (Number(r.montant) || 0), 0);
-      objByMonth[m] = Math.max(0, ...rows.filter((r) => r.mois === m).map((r) => Number(r.objectif) || 0));
-    });
-
-    // KPI mois en cours
-    const cm = fmt.thisMonth();
-    const caCur = caByMonth[cm] || 0;
-    const objCur = objByMonth[cm] || 0;
-    const caTotal = rows.reduce((s, r) => s + (Number(r.montant) || 0), 0);
-    const kpis = h('div', { class: 'kpis' }, [
-      kpiTile('CA ce mois-ci', fmt.money(caCur), objCur ? { p: (caCur / objCur * 100 - 100), cls: caCur >= objCur ? 'up' : 'down' } : null),
-      objCur ? kpiObjectif(caCur, objCur) : kpiTile('Objectif du mois', 'À définir', null),
-      kpiTile('Total cumulé', fmt.money(caTotal), null),
+    const actions = h('div', { class: 'page-actions' }, [
+      h('button', { class: 'btn btn-ghost', text: '⚙️ Catégories', onclick: manageFinanceCategories }),
     ]);
-    root.appendChild(kpis);
+    root.appendChild(UI.pageHead('💰', 'Finances', 'Objectif du mois, rentrées d’argent et évolution du chiffre d’affaires.', actions));
 
-    // graphique évolution CA
-    const caCard = h('div', { class: 'card card-pad' }, [h('div', { class: 'card-title', text: 'Évolution du chiffre d’affaires' })]);
-    const caHost = h('div', { class: 'chart-wrap' });
-    caCard.appendChild(caHost);
-    root.appendChild(caCard);
-    const caSeries = [
-      { name: 'CA', color: 'var(--series-1)', values: months.map((m) => caByMonth[m]) },
-    ];
-    if (months.some((m) => objByMonth[m] > 0)) caSeries.push({ name: 'Objectif', color: 'var(--series-3)', values: months.map((m) => objByMonth[m] || null) });
-    App.defer(() => {
-      Charts.line(caHost, { xLabels: months.map((m) => fmt.monthLabel(m)), series: caSeries, formatY: (v) => fmt.compact(v) + ' €', height: 250 });
-      Charts.legend(caCard, caSeries);
-    });
+    // agrégats (le mois vient de la date de la rentrée)
+    const entries = raw.map((e) => Object.assign({}, e, { mois: (e.date || '').slice(0, 7) || e.mois || '' }));
+    const months = uniqueSorted(entries.map((e) => e.mois).filter(Boolean));
+    const caByMonth = {};
+    months.forEach((m) => { caByMonth[m] = entries.filter((e) => e.mois === m).reduce((s, e) => s + (Number(e.montant) || 0), 0); });
+    const caSel = caByMonth[selMonth] || 0;
+    const goalSel = Store.getGoal(selMonth);
+    const caTotal = entries.reduce((s, e) => s + (Number(e.montant) || 0), 0);
 
-    // détail par source (barres, tous mois confondus)
-    const bySource = {};
-    rows.forEach((r) => { if (r.source) bySource[r.source] = (bySource[r.source] || 0) + (Number(r.montant) || 0); });
-    const srcColors = colorMap(Object.keys(bySource));
-    const srcItems = Object.keys(bySource)
-      .map((k) => ({ label: k, value: bySource[k], color: srcColors[k] }))
-      .sort((a, b) => b.value - a.value);
-    const srcCard = h('div', { class: 'card card-pad', style: 'margin-top:18px' }, [h('div', { class: 'card-title', text: 'Détail par source de revenu' })]);
-    const srcHost = h('div', { class: 'chart-wrap' });
-    srcCard.appendChild(srcHost);
-    if (srcItems.length) Charts.legend(srcCard, srcItems.map((i) => ({ name: `${i.label} · ${fmt.money(i.value)}`, color: i.color })));
-    root.appendChild(srcCard);
-    App.defer(() => Charts.bars(srcHost, { items: srcItems, formatV: (v) => fmt.compact(v) + ' €', height: 240 }));
+    // --- jauge objectif du mois ---
+    const ringHost = h('div', { class: 'ring-host' });
+    App.defer(() => Charts.ring(ringHost, { value: caSel, max: goalSel, color: 'var(--accent)' }));
+    const monthPick = h('input', { class: 'field', type: 'month', value: selMonth, style: 'width:auto' });
+    monthPick.addEventListener('change', () => { vs.finances.month = monthPick.value; App.render(); });
+    const goalInput = h('input', { class: 'field', type: 'number', min: '0', step: 'any', value: goalSel || '', placeholder: 'ex : 1000', style: 'width:130px' });
+    const updateBtn = h('button', { class: 'btn btn-primary', text: 'Mettre à jour', onclick: () => { Store.setGoal(selMonth, parseFloat(goalInput.value) || 0); UI.toast('Objectif mis à jour ✓'); } });
+    goalInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') updateBtn.click(); });
+    root.appendChild(h('div', { class: 'card card-pad gauge-card' }, [
+      ringHost,
+      h('div', { class: 'gauge-info' }, [
+        h('div', { class: 'gauge-head' }, [h('h3', { text: `🎯 Objectif de ${monthName(selMonth)}` }), monthPick]),
+        h('div', { class: 'gauge-sub', html: goalSel
+          ? `<b>${fmt.money(caSel)}</b> encaissés sur <b>${fmt.money(goalSel)}</b> visés`
+          : 'Aucun objectif défini pour ce mois — indique-le ci-dessous 👇' }),
+        h('div', {}, [h('label', { class: 'mini-label', text: 'Changer l’objectif (€)' }), h('div', { style: 'display:flex;gap:8px;flex-wrap:wrap' }, [goalInput, updateBtn])]),
+      ]),
+    ]));
 
-    if (!raw.length) { root.appendChild(UI.empty('🪙', 'Ajoute ta première entrée de revenu.')); return root; }
+    // KPIs
+    root.appendChild(h('div', { class: 'kpis' }, [
+      kpiTile('CA ce mois-ci', fmt.money(caByMonth[fmt.thisMonth()] || 0), null),
+      kpiTile('Total cumulé', fmt.money(caTotal), null),
+      kpiTile('Rentrées enregistrées', String(raw.length), null),
+    ]));
 
-    // tableau
-    const tableCard = h('div', { class: 'card', style: 'margin-top:18px' });
-    const table = UI.editableTable({
-      coll: 'finances',
-      minWidth: 720,
-      rows,
-      columns: [
-        { key: 'mois', label: 'Mois', type: 'month', width: '16%' },
-        { key: 'source', label: 'Source de revenu', type: 'text', placeholder: 'Boutique, sponsor, atelier…', width: '28%' },
-        { key: 'montant', label: 'Montant', type: 'number', min: 0, align: 'right', width: '15%' },
-        { key: 'total', label: 'Total du mois', readonly: true, align: 'right', render: (r) => fmt.money(caByMonth[r.mois] || 0) },
-        { key: 'objectif', label: 'Objectif du mois', type: 'number', min: 0, align: 'right', width: '16%' },
-      ],
-    });
-    tableCard.appendChild(table);
-    root.appendChild(tableCard);
+    // --- formulaire Rentrées d'argent ---
+    root.appendChild(rentreeForm(cats, raw.length));
+
+    // liste des rentrées
+    if (raw.length) {
+      const sorted = entries.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      // le menu inclut les catégories gérées + celles déjà utilisées (rien n'est perdu)
+      const allCats = uniqueSorted([...cats, ...entries.map((e) => e.categorie).filter(Boolean)]);
+      const tableCard = h('div', { class: 'card', style: 'margin-top:16px' });
+      tableCard.appendChild(UI.editableTable({
+        coll: 'finances', minWidth: 720, rows: sorted,
+        columns: [
+          { key: 'date', label: 'Date', type: 'date', width: '15%' },
+          { key: 'client', label: 'Client / source', type: 'text', placeholder: 'Ex : Commande M. Dupont', width: '32%' },
+          { key: 'categorie', label: 'Catégorie', type: 'select', width: '24%', options: ['', ...allCats].map((c) => ({ value: c, label: c || '— Sans catégorie —' })) },
+          { key: 'montant', label: 'Montant', type: 'number', min: 0, align: 'right', width: '15%' },
+        ],
+      }));
+      root.appendChild(tableCard);
+    }
+
+    // --- graphiques ---
+    if (months.length) {
+      const caCard = h('div', { class: 'card card-pad', style: 'margin-top:18px' }, [h('div', { class: 'card-title', text: 'Évolution du chiffre d’affaires' })]);
+      const caHost = h('div', { class: 'chart-wrap' });
+      caCard.appendChild(caHost);
+      const caSeries = [{ name: 'CA', color: 'var(--series-1)', values: months.map((m) => caByMonth[m]) }];
+      if (months.some((m) => Store.getGoal(m) > 0)) caSeries.push({ name: 'Objectif', color: 'var(--series-3)', values: months.map((m) => Store.getGoal(m) || null) });
+      App.defer(() => { Charts.line(caHost, { xLabels: months.map((m) => fmt.monthLabel(m)), series: caSeries, formatY: (v) => fmt.compact(v) + ' €', height: 250 }); Charts.legend(caCard, caSeries); });
+      root.appendChild(caCard);
+
+      const byCat = {};
+      entries.forEach((e) => { const c = e.categorie || 'Sans catégorie'; byCat[c] = (byCat[c] || 0) + (Number(e.montant) || 0); });
+      const catColors = colorMap(Object.keys(byCat));
+      const catItems = Object.keys(byCat).map((k) => ({ label: k, value: byCat[k], color: catColors[k] })).sort((a, b) => b.value - a.value);
+      const catCard = h('div', { class: 'card card-pad', style: 'margin-top:18px' }, [h('div', { class: 'card-title', text: 'Détail par catégorie de revenu' })]);
+      const catHost = h('div', { class: 'chart-wrap' });
+      catCard.appendChild(catHost);
+      if (catItems.length) Charts.legend(catCard, catItems.map((i) => ({ name: `${i.label} · ${fmt.money(i.value)}`, color: i.color })));
+      App.defer(() => Charts.bars(catHost, { items: catItems, formatV: (v) => fmt.compact(v) + ' €', height: 240 }));
+      root.appendChild(catCard);
+    }
+
     return root;
   }
 
-  function kpiObjectif(ca, obj) {
-    const pct = Math.min(100, Math.round((ca / obj) * 100));
-    return h('div', { class: 'kpi' }, [
-      h('div', { class: 'k-label', text: 'Objectif du mois' }),
-      h('div', { class: 'k-value', text: fmt.money(obj) }),
-      h('div', { class: 'progress-track', style: 'margin-top:9px' }, [h('div', { class: 'progress-fill', style: `width:${pct}%` })]),
-      h('div', { class: 'k-delta ' + (ca >= obj ? 'up' : 'flat'), style: 'margin-top:6px', text: `${pct}% atteint` }),
+  function rentreeForm(cats, count) {
+    const client = h('input', { class: 'field', placeholder: 'Ex : Commande M. Dupont' });
+    const montant = h('input', { class: 'field', type: 'number', min: '0', step: 'any', placeholder: '0' });
+    const date = h('input', { class: 'field', type: 'date', value: fmt.todayISO() });
+    const cat = h('select', { class: 'field' });
+    cats.forEach((c, i) => { const o = h('option', { value: c }, c); if (i === 0) o.selected = true; cat.appendChild(o); });
+    const add = h('button', { class: 'btn btn-primary', text: '+ Ajouter la rentrée', onclick: () => {
+      const m = parseFloat(montant.value) || 0;
+      if (!m && !client.value.trim()) { UI.toast('Indique au moins un montant'); return; }
+      Store.add('finances', { client: client.value.trim(), montant: m, date: date.value || fmt.todayISO(), categorie: cat.value });
+      UI.toast('Rentrée ajoutée ✓');
+    } });
+    return h('div', { class: 'card card-pad' }, [
+      h('div', { class: 'card-title' }, [document.createTextNode('💶 Rentrées d’argent '), h('span', { class: 'muted', style: 'font-weight:500;font-size:13px', text: `· ${count} entrée${count > 1 ? 's' : ''}` })]),
+      h('div', { class: 'rentree-grid' }, [
+        formRow('Client / source', client),
+        formRow('Montant (€)', montant),
+        formRow('Date', date),
+        formRow('Catégorie', cat),
+      ]),
+      h('div', { style: 'display:flex;justify-content:flex-end;margin-top:12px' }, [add]),
     ]);
+  }
+
+  function manageFinanceCategories() {
+    function bodyList() {
+      const list = h('div', { style: 'display:flex;flex-direction:column;gap:8px' });
+      Store.financeCategories().forEach((c) => {
+        list.appendChild(h('div', { style: 'display:flex;align-items:center;gap:8px' }, [
+          h('span', { style: 'flex:1;font-weight:600', text: c }),
+          h('button', { class: 'btn btn-ghost btn-sm', text: '✏️ Renommer', onclick: async () => { const nn = await UI.prompt('Nouveau nom', c, 'Renommer'); if (nn) { Store.renameFinanceCategory(c, nn); rerender(); } } }),
+          h('button', { class: 'btn btn-ghost btn-sm btn-danger', text: '🗑', onclick: async () => { if (await UI.confirm(`Supprimer « ${c} » ? Les rentrées associées sont conservées, sans catégorie.`)) { Store.removeFinanceCategory(c); rerender(); } } }),
+        ]));
+      });
+      const addBtn = h('button', { class: 'btn btn-ghost btn-sm', style: 'margin-top:6px;align-self:flex-start', text: '+ Nouvelle catégorie', onclick: async () => { const nn = await UI.prompt('Nom de la catégorie', '', 'Ajouter'); if (nn) { Store.addFinanceCategory(nn); rerender(); } } });
+      return [list, addBtn];
+    }
+    let close;
+    function rerender() { if (close) close(); open(); }
+    function open() { close = UI.openModal({ title: 'Catégories de revenus', body: bodyList(), footer: [h('button', { class: 'btn btn-primary', text: 'Fermer', onclick: () => close() })], onClose: () => App.render() }); }
+    open();
   }
 
   function uniqueSorted(arr) { return Array.from(new Set(arr)).sort((a, b) => a.localeCompare(b)); }
 
-  return { outreach, todo, social, shop, ideas, finances };
+  /* =========================================================
+     7) RÉCOMPENSES (badges & paliers)
+     ========================================================= */
+  const MEDALS = ['🥉', '🥈', '🥇', '🏆', '💎', '👑', '🌟'];
+  const REWARD_PHRASES = [
+    'Continue comme ça, tu gères ! 💪', 'Chaque petit pas compte 🌱', 'Tu es sur la bonne voie ✨',
+    'La régularité paie 🔥', 'Fière de toi 💛', 'Un palier à la fois, tu y arrives 🚀',
+  ];
+
+  function rewards() {
+    const root = h('div');
+    root.appendChild(UI.pageHead('🏆', 'Récompenses', 'Tes petits trophées à débloquer — un peu de fun et de motivation ! 🎉'));
+
+    const social = Store.list('social');
+    const peakFollowers = social.reduce((mx, r) => Math.max(mx, (Number(r.instagram) || 0) + (Number(r.tiktok) || 0) + (Number(r.threads) || 0)), 0);
+    const totalRevenue = Store.list('finances').reduce((s, e) => s + (Number(e.montant) || 0), 0);
+    const doneTasks = Store.list('todos').filter((t) => t.done).length;
+    const contacts = Store.list('outreach').length;
+    const accepted = Store.list('outreach').filter((o) => o.statut === 'Accepté').length;
+    const products = Store.list('shop').length;
+    const ideasN = Store.list('ideas').length;
+
+    const groups = [
+      { emoji: '📱', title: 'Abonnés (pic)', value: peakFollowers, fmt: (v) => fmt.num(v) + ' abonnés', tiers: [100, 250, 500, 1000, 2500, 5000, 10000] },
+      { emoji: '💰', title: 'Revenus cumulés', value: totalRevenue, fmt: (v) => fmt.money(v), tiers: [50, 100, 250, 500, 1000, 2500, 5000] },
+      { emoji: '✅', title: 'Tâches terminées', value: doneTasks, fmt: (v) => v + ' tâches', tiers: [1, 5, 10, 25, 50, 100] },
+      { emoji: '📮', title: 'Contacts démarchés', value: contacts, fmt: (v) => v + ' contacts', tiers: [1, 5, 10, 25, 50] },
+      { emoji: '🤝', title: 'Réponses positives', value: accepted, fmt: (v) => v + ' accepté' + (v > 1 ? 's' : ''), tiers: [1, 3, 5, 10, 20] },
+      { emoji: '🛍️', title: 'Produits créés', value: products, fmt: (v) => v + ' produits', tiers: [1, 5, 10, 20] },
+      { emoji: '💡', title: 'Idées notées', value: ideasN, fmt: (v) => v + ' idées', tiers: [1, 5, 10, 25] },
+    ];
+
+    const earned = groups.reduce((s, g) => s + g.tiers.filter((t) => g.value >= t).length, 0);
+    const total = groups.reduce((s, g) => s + g.tiers.length, 0);
+    const heroPhrase = earned === 0 ? 'C’est le début de l’aventure — ton premier trophée t’attend ! 🌱'
+      : earned >= total ? 'Incroyable, tu as absolument tout débloqué ! 👑🎉'
+        : `Déjà ${earned} trophée${earned > 1 ? 's' : ''} débloqué${earned > 1 ? 's' : ''} — tu assures ! 💪`;
+    root.appendChild(h('div', { class: 'reward-hero' }, [
+      h('div', { class: 'trophy', text: '🏆' }),
+      h('div', {}, [
+        h('div', { class: 'h-num', text: `${earned} / ${total} trophées` }),
+        h('div', { class: 'h-phrase', text: heroPhrase }),
+      ]),
+    ]));
+
+    const grid = h('div', { class: 'reward-grid' });
+    groups.forEach((g, gi) => grid.appendChild(rewardCard(g, gi)));
+    root.appendChild(grid);
+    return root;
+  }
+
+  function rewardCard(g, gi) {
+    const unlocked = g.tiers.filter((t) => g.value >= t).length;
+    const next = g.tiers.find((t) => g.value < t);
+    const chips = h('div', { class: 'tier-row' }, g.tiers.map((t, i) => {
+      const on = g.value >= t;
+      return h('span', { class: 'tier-chip' + (on ? ' unlocked' : ''), title: on ? 'Débloqué !' : 'À débloquer' }, [
+        document.createTextNode(on ? MEDALS[i % MEDALS.length] : '🔒'),
+        document.createTextNode(' ' + g.fmt(t).replace(/\s?abonnés|\s?tâches|\s?contacts|\s?accepté.?|\s?produits|\s?idées/,'')),
+      ]);
+    }));
+
+    let progress = null;
+    if (next) {
+      const prev = [...g.tiers].reverse().find((t) => g.value >= t) || 0;
+      const pct = Math.max(4, Math.min(100, Math.round(((g.value - prev) / (next - prev)) * 100)));
+      progress = h('div', {}, [
+        h('div', { class: 'progress-track', style: 'height:9px' }, [h('div', { class: 'progress-fill', style: `width:${pct}%` })]),
+        h('div', { class: 'reward-next', html: `Plus que <b>${g.fmt(next - g.value)}</b> pour débloquer le prochain palier ${MEDALS[unlocked % MEDALS.length]}` }),
+      ]);
+    } else {
+      progress = h('div', { class: 'reward-next', text: '🎉 Bravo, tous les paliers sont atteints !' });
+    }
+
+    return h('div', { class: 'reward-card' }, [
+      h('div', { class: 'reward-head' }, [h('span', { class: 'r-emoji', text: g.emoji }), h('span', { class: 'r-title', text: g.title })]),
+      h('div', { class: 'reward-val', text: g.fmt(g.value) }),
+      chips,
+      progress,
+      h('div', { class: 'reward-phrase', text: REWARD_PHRASES[(gi + unlocked) % REWARD_PHRASES.length] }),
+    ]);
+  }
+
+  return { outreach, todo, social, shop, ideas, finances, rewards };
 })();

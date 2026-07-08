@@ -179,6 +179,31 @@ window.Charts = (function () {
     }
   }
 
+  /* ---- Jauge circulaire (anneau de progression) ----
+     opts: { value, max, color, sub } */
+  function ring(host, opts) {
+    host.innerHTML = '';
+    const value = opts.value || 0;
+    const max = opts.max || 0;
+    const color = opts.color || 'var(--accent)';
+    const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
+    const r = 52, cx = 65, cy = 65, circ = 2 * Math.PI * r;
+    const off = circ * (1 - pct / 100);
+    const svg = el('svg', { class: 'chart', viewBox: '0 0 130 130', style: 'max-width:150px', role: 'img' });
+    svg.appendChild(el('circle', { cx, cy, r, fill: 'none', stroke: 'var(--accent-soft)', 'stroke-width': 13 }));
+    if (pct > 0) svg.appendChild(el('circle', {
+      cx, cy, r, fill: 'none', stroke: color, 'stroke-width': 13, 'stroke-linecap': 'round',
+      'stroke-dasharray': circ, 'stroke-dashoffset': off, transform: `rotate(-90 ${cx} ${cy})`,
+    }));
+    const t1 = el('text', { x: cx, y: cy - 2, 'text-anchor': 'middle', fill: color, 'font-size': 26, 'font-weight': 800 });
+    t1.textContent = pct + '%';
+    svg.appendChild(t1);
+    const t2 = el('text', { x: cx, y: cy + 18, 'text-anchor': 'middle', fill: 'var(--ink-soft)', 'font-size': 11 });
+    t2.textContent = opts.sub || 'de l’objectif';
+    svg.appendChild(t2);
+    host.appendChild(svg);
+  }
+
   function legend(host, series) {
     const div = document.createElement('div');
     div.className = 'chart-legend';
@@ -191,5 +216,5 @@ window.Charts = (function () {
     host.appendChild(div);
   }
 
-  return { line, bars, legend };
+  return { line, bars, ring, legend };
 })();

@@ -12,13 +12,31 @@ window.Store = (function () {
     return {
       settings: { title: 'Mon espace' },
       shopCategories: ['Coloriages', 'Jeux', 'Éveil'],
+      financeCategories: ['Commande particulier', 'Boutique en ligne', 'Sponsor / partenariat', 'Atelier', 'Autre'],
+      financeGoals: {},
       outreach: [],
       todos: [],
       social: [],
       shop: [],
       ideas: [],
       finances: [],
+      socialNotes: [],
     };
+  }
+
+  // migration douce des anciennes données finances
+  function migrate(s) {
+    s.financeGoals = s.financeGoals || {};
+    (s.finances || []).forEach((e) => {
+      if (e.date === undefined) e.date = e.mois ? e.mois + '-01' : '';
+      if (e.categorie === undefined) e.categorie = e.source || '';
+      if (e.client === undefined) e.client = '';
+      if (e.objectif !== undefined && Number(e.objectif) > 0) {
+        const m = (e.date || '').slice(0, 7) || e.mois;
+        if (m) s.financeGoals[m] = Math.max(s.financeGoals[m] || 0, Number(e.objectif) || 0);
+      }
+    });
+    return s;
   }
 
   function load() {
@@ -27,9 +45,9 @@ window.Store = (function () {
       if (!raw) return defaultState();
       const parsed = JSON.parse(raw);
       // fusion défensive avec le schéma par défaut
-      return Object.assign(defaultState(), parsed, {
+      return migrate(Object.assign(defaultState(), parsed, {
         settings: Object.assign({ title: 'Mon espace' }, parsed.settings || {}),
-      });
+      }));
     } catch (e) {
       console.warn('Store: lecture impossible, réinitialisation', e);
       return defaultState();
@@ -136,6 +154,32 @@ window.Store = (function () {
     }
   }
 
+  // --- objectifs mensuels de finances ---
+  function getGoal(month) { return Number(state.financeGoals[month] || 0); }
+  function setGoal(month, val) { state.financeGoals[month] = Math.max(0, Number(val) || 0); commit(); }
+
+  // --- catégories de finances ---
+  function financeCategories() { return state.financeCategories || []; }
+  function addFinanceCategory(name) {
+    name = (name || '').trim();
+    if (name && !state.financeCategories.includes(name)) { state.financeCategories.push(name); commit(); }
+  }
+  function removeFinanceCategory(name) {
+    state.financeCategories = state.financeCategories.filter((c) => c !== name);
+    state.finances.forEach((e) => { if (e.categorie === name) e.categorie = ''; });
+    commit();
+  }
+  function renameFinanceCategory(oldN, newN) {
+    newN = (newN || '').trim();
+    if (!newN) return;
+    const i = state.financeCategories.indexOf(oldN);
+    if (i >= 0 && !state.financeCategories.includes(newN)) {
+      state.financeCategories[i] = newN;
+      state.finances.forEach((e) => { if (e.categorie === oldN) e.categorie = newN; });
+      commit();
+    }
+  }
+
   function subscribe(fn) { listeners.push(fn); return () => {
     const i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1);
   }; }
@@ -161,9 +205,9 @@ window.Store = (function () {
         try {
           const data = JSON.parse(reader.result);
           if (typeof data !== 'object' || data === null) throw new Error('format');
-          state = Object.assign(defaultState(), data, {
+          state = migrate(Object.assign(defaultState(), data, {
             settings: Object.assign({ title: 'Mon espace' }, data.settings || {}),
-          });
+          }));
           commit();
           resolve();
         } catch (e) { reject(e); }
@@ -177,5 +221,7 @@ window.Store = (function () {
     get, list, add, update, remove, move, reorder,
     setSetting, subscribe, exportFile, importFile, uid,
     categories, addCategory, removeCategory, renameCategory,
+    getGoal, setGoal,
+    financeCategories, addFinanceCategory, removeFinanceCategory, renameFinanceCategory,
   };
 })();
