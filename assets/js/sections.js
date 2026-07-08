@@ -25,7 +25,17 @@ window.Sections = (function () {
   /* =========================================================
      1) DÉMARCHAGE
      ========================================================= */
-  const STATUTS_OUTREACH = ['À contacter', 'Envoyé', 'Relancé', 'En discussion', 'Accepté', 'Refusé'];
+  const STATUT_OUTREACH = [
+    { name: 'À contacter', emoji: '📩', color: '#a99f97' },
+    { name: 'Envoyé', emoji: '🔵', color: '#2a78d6' },
+    { name: 'Relancé', emoji: '🔄', color: '#d9a441' },
+    { name: 'En discussion', emoji: '💬', color: '#7c5cc4' },
+    { name: 'Accepté', emoji: '🟢', color: '#2f9e6b' },
+    { name: 'Refusé', emoji: '🟠', color: '#e8853f' },
+  ];
+  const STATUTS_OUTREACH = STATUT_OUTREACH.map((s) => s.name);
+  const STATUT_MAP = {};
+  STATUT_OUTREACH.forEach((s) => { STATUT_MAP[s.name] = s; });
   const TYPES_OUTREACH = ['Édition', 'Jeux', 'Marque'];
 
   function outreach() {
@@ -60,19 +70,30 @@ window.Sections = (function () {
       rows,
       rowClass: (r) => (r.relance && r.relance <= today && r.statut !== 'Accepté' && r.statut !== 'Refusé') ? 'due' : '',
       columns: [
-        { key: 'nom', label: 'Nom', type: 'text', width: '16%', placeholder: 'Nom…' },
+        { key: '_dot', label: '', readonly: true, width: '30px',
+          render: (r) => { const s = STATUT_MAP[r.statut] || {}; return `<span class="status-dot" title="${r.statut || ''}" style="background:${s.color || '#ccc'}"></span>`; } },
+        { key: 'nom', label: 'Nom', type: 'text', width: '15%', placeholder: 'Nom…' },
         { key: 'type', label: 'Type', type: 'select', width: '10%', options: TYPES_OUTREACH },
-        { key: 'pays', label: 'Pays', type: 'text', width: '10%', placeholder: 'Pays' },
-        { key: 'contact', label: 'Contact', type: 'text', width: '15%', placeholder: 'email / @' },
+        { key: 'pays', label: 'Pays', type: 'text', width: '9%', placeholder: 'Pays' },
+        { key: 'contact', label: 'Contact', type: 'text', width: '14%', placeholder: 'email / @' },
         { key: 'dateEnvoi', label: 'Date d’envoi', type: 'date', width: '11%' },
         { key: 'relance', label: 'Relance prévue', type: 'date', width: '11%' },
-        { key: 'statut', label: 'Statut', type: 'select', width: '12%', options: STATUTS_OUTREACH },
-        { key: 'notes', label: 'Notes', type: 'area', placeholder: 'Notes…' },
+        { key: 'statut', label: 'Statut', type: 'select', width: '13%',
+          options: STATUT_OUTREACH.map((s) => ({ value: s.name, label: `${s.emoji} ${s.name}` })) },
+        { key: 'notes', label: 'Note', width: '16%', cell: (coll, row) => noteCellBtn(row) },
       ],
     });
     root.appendChild(table);
 
-    const hint = h('p', { class: 'sub', style: 'margin-top:10px', html: 'Les lignes surlignées 🟠 sont des <b>relances à faire</b> (date de relance atteinte).' });
+    // légende des statuts
+    const legend = h('div', { class: 'status-legend' },
+      STATUT_OUTREACH.map((s) => h('span', { class: 'lg-item' }, [
+        h('span', { class: 'status-dot', style: `background:${s.color}` }),
+        document.createTextNode(` ${s.emoji} ${s.name}`),
+      ])));
+    root.appendChild(legend);
+
+    const hint = h('p', { class: 'sub', style: 'margin-top:8px', html: 'Les lignes surlignées en orangé sont des <b>relances à faire</b> (date de relance atteinte). Clique sur une <b>note</b> pour l’ouvrir en grand.' });
     root.appendChild(hint);
 
     // filtrage direct dans le DOM (sans re-render → garde le focus)
@@ -106,6 +127,36 @@ window.Sections = (function () {
       sel.appendChild(opt);
     });
     return sel;
+  }
+
+  // cellule Note : aperçu cliquable qui ouvre la note complète en bulle
+  function noteCellBtn(row) {
+    const txt = (row.notes || '').trim();
+    const short = txt ? (txt.length > 32 ? txt.slice(0, 32) + '…' : txt) : '';
+    return h('button', {
+      class: 'note-cell' + (txt ? '' : ' empty'),
+      title: txt ? 'Voir / modifier la note' : 'Ajouter une note',
+      onclick: () => openNoteEditor(row.id),
+    }, [
+      h('span', { text: txt ? '📝' : '＋' }),
+      h('span', { class: 'note-cell-txt', text: txt ? short : 'Ajouter une note' }),
+    ]);
+  }
+
+  function openNoteEditor(id) {
+    const r = Store.list('outreach').find((x) => x.id === id);
+    if (!r) return;
+    const ta = h('textarea', { class: 'field big-area', style: 'width:100%;min-height:220px', placeholder: 'Écris ta note ici…' });
+    ta.value = r.notes || '';
+    ta.addEventListener('input', () => Store.update('outreach', id, { notes: ta.value }, { silent: true }));
+    const close = UI.openModal({
+      title: `📝 Note — ${r.nom || 'contact'}`,
+      wide: true,
+      body: [ta],
+      footer: [h('button', { class: 'btn btn-primary', text: 'Terminé', onclick: () => close() })],
+      onClose: () => App.render(),
+    });
+    setTimeout(() => ta.focus(), 30);
   }
 
   /* =========================================================

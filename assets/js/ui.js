@@ -182,6 +182,7 @@ window.UI = (function () {
   }
 
   function buildCell(coll, row, col) {
+    if (col.cell) return col.cell(coll, row);
     if (col.readonly) {
       const span = h('span', { class: 'cell-input', style: 'display:block' });
       span.innerHTML = col.render ? col.render(row) : (row[col.key] ?? '');

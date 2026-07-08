@@ -202,6 +202,19 @@ td.tight { width: 1%; white-space: nowrap; }
 .select-wrap { position: relative; }
 .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
 
+/* point de statut + cellule note + légende */
+.status-dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; vertical-align: middle; box-shadow: 0 0 0 1px rgba(44,38,34,.08); }
+.note-cell {
+  display: flex; align-items: center; gap: 7px; width: 100%; min-width: 120px;
+  border: 1px solid transparent; background: transparent; border-radius: 8px;
+  padding: 7px 8px; text-align: left; font-size: 14px; color: var(--ink);
+}
+.note-cell:hover { background: var(--surface); border-color: var(--line); }
+.note-cell.empty { color: var(--muted); }
+.note-cell-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status-legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 12px; }
+.status-legend .lg-item { font-size: 12.5px; color: var(--ink-soft); display: inline-flex; align-items: center; gap: 6px; }
+
 /* urgent / relance highlight */
 tr.is-urgent td:first-child { box-shadow: inset 3px 0 0 var(--urgent); }
 tr.due td { background: var(--warn-soft) !important; }
