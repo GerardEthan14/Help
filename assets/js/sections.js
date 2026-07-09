@@ -1078,6 +1078,155 @@ window.Sections = (function () {
   function uniqueSorted(arr) { return Array.from(new Set(arr)).sort((a, b) => a.localeCompare(b)); }
 
   /* =========================================================
+     TEMPS (suivi du temps + niveaux)
+     ========================================================= */
+  const LEVELS = [
+    { h: 0, title: 'Débutante', icon: '🌱' },
+    { h: 5, title: 'Apprentie', icon: '✏️' },
+    { h: 15, title: 'Créative', icon: '🎨' },
+    { h: 30, title: 'Artisane', icon: '🧵' },
+    { h: 50, title: 'Passionnée', icon: '🌟' },
+    { h: 80, title: 'Pro en devenir', icon: '🚀' },
+    { h: 120, title: 'Experte', icon: '💎' },
+    { h: 180, title: 'Maîtresse des lieux', icon: '👑' },
+    { h: 260, title: 'Légende', icon: '🏆' },
+    { h: 400, title: 'Icône', icon: '🌈' },
+  ];
+  function fmtDur(min) { min = Math.round(min); const hh = Math.floor(min / 60), mm = min % 60; return hh ? `${hh} h${mm ? ' ' + mm + ' min' : ''}` : `${mm} min`; }
+  function pad2(n) { return String(n).padStart(2, '0'); }
+  function daysAgoISO(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
+
+  function time() {
+    const sessions = Store.list('timeSessions');
+    const t = Store.timer();
+    const root = h('div');
+    root.appendChild(UI.pageHead('⏱️', 'Suivi du temps', 'Note tes heures de travail et gagne des niveaux 🎮'));
+
+    const totalMin = sessions.reduce((s, x) => s + (+x.minutes || 0), 0);
+    const totalH = totalMin / 60;
+
+    // --- niveau ---
+    let idx = 0; LEVELS.forEach((l, i) => { if (totalH >= l.h) idx = i; });
+    const lvl = LEVELS[idx], next = LEVELS[idx + 1];
+    const pct = next ? Math.max(2, Math.min(100, Math.round(((totalH - lvl.h) / (next.h - lvl.h)) * 100))) : 100;
+    root.appendChild(h('div', { class: 'level-hero' }, [
+      h('div', { class: 'level-badge' }, [h('span', { class: 'lvl-icon', text: lvl.icon }), h('span', { class: 'lvl-num', text: 'Niv. ' + (idx + 1) })]),
+      h('div', { style: 'flex:1;min-width:210px' }, [
+        h('div', { class: 'lvl-title', text: lvl.title }),
+        h('div', { class: 'lvl-sub', text: `${fmtDur(totalMin)} de travail au total` }),
+        h('div', { class: 'progress-track', style: 'margin-top:10px;max-width:440px' }, [h('div', { class: 'progress-fill', style: `width:${pct}%` })]),
+        h('div', { class: 'lvl-next', text: next ? `Plus que ${Math.max(0, next.h - totalH).toFixed(1)} h pour le niveau ${idx + 2} · ${next.icon} ${next.title}` : '🎉 Niveau maximum atteint, bravo !' }),
+      ]),
+    ]));
+
+    // --- chrono ---
+    const disp = h('div', { class: 'timer-display' });
+    const fmtElapsed = (ms) => { const s = Math.floor(ms / 1000); return `${pad2(Math.floor(s / 3600))}:${pad2(Math.floor(s / 60) % 60)}:${pad2(s % 60)}`; };
+    const labelInput = h('input', { class: 'field', style: 'flex:1;min-width:160px', placeholder: 'Sur quoi travailles-tu ? (optionnel)', value: t.running ? t.label : '' });
+    let controls;
+    if (t.running) {
+      labelInput.disabled = true;
+      disp.classList.add('on');
+      const tick = () => { disp.textContent = fmtElapsed(Date.now() - t.startedAt); };
+      tick();
+      const id = setInterval(tick, 1000);
+      App.addCleanup(() => clearInterval(id));
+      controls = h('button', { class: 'btn btn-primary', text: '⏹ Arrêter', onclick: () => { const m = Store.stopTimer(); UI.toast(`+ ${fmtDur(m)} enregistré ✓`); } });
+    } else {
+      disp.textContent = '00:00:00';
+      controls = h('button', { class: 'btn btn-primary', text: '▶ Démarrer', onclick: () => Store.startTimer(labelInput.value.trim()) });
+    }
+    root.appendChild(h('div', { class: 'card card-pad timer-card' }, [
+      h('div', { class: 'card-title', text: t.running ? '⏱️ Chrono en cours' + (t.label ? ` · ${t.label}` : '') : '⏱️ Chrono' }),
+      disp,
+      h('div', { class: 'timer-row' }, [labelInput, controls, t.running ? h('button', { class: 'btn btn-ghost', text: 'Annuler', title: 'Annuler sans enregistrer', onclick: () => Store.cancelTimer() }) : null].filter(Boolean)),
+    ]));
+
+    // --- ajout manuel ---
+    root.appendChild(manualTimeForm());
+
+    // --- KPIs ---
+    const today = fmt.todayISO(), w7 = daysAgoISO(6), cm = fmt.thisMonth();
+    const sum = (pred) => sessions.filter(pred).reduce((s, x) => s + (+x.minutes || 0), 0);
+    root.appendChild(h('div', { class: 'kpis' }, [
+      kpiTile('Aujourd’hui', fmtDur(sum((x) => x.date === today)), null),
+      kpiTile('7 derniers jours', fmtDur(sum((x) => x.date >= w7)), null),
+      kpiTile('Ce mois-ci', fmtDur(sum((x) => (x.date || '').slice(0, 7) === cm)), null),
+      kpiTile('Total', fmtDur(totalMin), null),
+    ]));
+
+    // --- graphique : heures par jour (14 derniers jours) ---
+    if (sessions.length) {
+      const days = [];
+      for (let i = 13; i >= 0; i--) days.push(daysAgoISO(i));
+      const items = days.map((d) => ({ label: new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }), value: +(sum((x) => x.date === d) / 60).toFixed(2) }));
+      const chartCard = h('div', { class: 'card card-pad', style: 'margin-top:18px' }, [h('div', { class: 'card-title', text: 'Heures par jour (14 derniers jours)' })]);
+      const host = h('div', { class: 'chart-wrap' });
+      chartCard.appendChild(host);
+      App.defer(() => Charts.bars(host, { items, color: 'var(--accent)', formatV: (v) => v + ' h', height: 220 }));
+      root.appendChild(chartCard);
+
+      // table sessions
+      const sorted = sessions.slice().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+      const tableCard = h('div', { class: 'card', style: 'margin-top:18px' });
+      tableCard.appendChild(UI.editableTable({
+        coll: 'timeSessions', minWidth: 640, rows: sorted,
+        columns: [
+          { key: 'date', label: 'Date', type: 'date', width: '18%' },
+          { key: 'label', label: 'Description', type: 'text', placeholder: 'Sur quoi ?', width: '46%' },
+          { key: 'minutes', label: 'Minutes', type: 'number', min: 0, align: 'right', width: '15%' },
+          { key: 'duree', label: 'Durée', readonly: true, align: 'right', render: (r) => fmtDur(+r.minutes || 0) },
+        ],
+      }));
+      root.appendChild(tableCard);
+    } else {
+      root.appendChild(UI.empty('⏳', 'Aucune session pour l’instant. Lance le chrono ou ajoute des heures manuellement !'));
+    }
+
+    // --- échelle des niveaux ---
+    const ladder = h('div', { class: 'card card-pad', style: 'margin-top:18px' }, [h('div', { class: 'card-title', text: '🎮 Niveaux à débloquer' })]);
+    const lgrid = h('div', { class: 'level-grid', style: 'margin-top:12px' });
+    LEVELS.forEach((l, i) => {
+      const on = totalH >= l.h;
+      lgrid.appendChild(h('div', { class: 'level-item' + (on ? ' on' : '') + (i === idx ? ' current' : '') }, [
+        h('span', { class: 'li-icon', text: on ? l.icon : '🔒' }),
+        h('div', {}, [
+          h('div', { class: 'li-title', text: `Niv. ${i + 1} · ${l.title}` }),
+          h('div', { class: 'li-req', text: l.h === 0 ? 'Dès le départ' : `${l.h} h de travail` }),
+        ]),
+        i === idx ? h('span', { class: 'li-cur', text: 'Actuel' }) : null,
+      ].filter(Boolean)));
+    });
+    ladder.appendChild(lgrid);
+    root.appendChild(ladder);
+
+    return root;
+  }
+
+  function manualTimeForm() {
+    const date = h('input', { class: 'field', type: 'date', value: fmt.todayISO() });
+    const hoursI = h('input', { class: 'field', type: 'number', min: '0', step: '1', placeholder: '0' });
+    const minI = h('input', { class: 'field', type: 'number', min: '0', max: '59', step: '1', placeholder: '0' });
+    const label = h('input', { class: 'field', placeholder: 'Description (optionnel)' });
+    const add = h('button', { class: 'btn btn-ghost', text: '+ Ajouter ces heures', onclick: () => {
+      const mins = (parseInt(hoursI.value, 10) || 0) * 60 + (parseInt(minI.value, 10) || 0);
+      if (mins <= 0) { UI.toast('Indique une durée'); return; }
+      Store.add('timeSessions', { date: date.value || fmt.todayISO(), minutes: mins, label: label.value.trim() });
+      UI.toast('Temps ajouté ✓');
+    } });
+    return h('div', { class: 'card card-pad', style: 'margin-top:16px' }, [
+      h('div', { class: 'card-title', text: '✍️ Ajouter des heures manuellement' }),
+      h('div', { class: 'time-form' }, [
+        formRow('Date', date),
+        formRow('Heures', hoursI),
+        formRow('Minutes', minI),
+        formRow('Description', label),
+      ]),
+      h('div', { style: 'display:flex;justify-content:flex-end;margin-top:12px' }, [add]),
+    ]);
+  }
+
+  /* =========================================================
      7) RÉCOMPENSES (succès type Steam)
      ========================================================= */
   function rewardData() {
@@ -1096,9 +1245,13 @@ window.Sections = (function () {
     const goalHit = months.some((m) => { const ca = entries.filter((e) => e.mois === m).reduce((s, e) => s + (+e.montant || 0), 0); const g = Store.getGoal(m); return g > 0 && ca >= g; });
     const revenueCats = new Set(entries.filter((e) => (+e.montant || 0) > 0 && e.categorie).map((e) => e.categorie));
 
-    const sectionsUsed = [outreach.length, todos.length, social.length, shop.length, ideas.length, fin.length].filter((n) => n > 0).length;
+    const timeSessions = Store.list('timeSessions');
+    const timeMin = timeSessions.reduce((s, x) => s + (+x.minutes || 0), 0);
+    const sectionsUsed = [outreach.length, todos.length, social.length, shop.length, ideas.length, fin.length, timeSessions.length].filter((n) => n > 0).length;
 
     return {
+      totalHours: timeMin / 60,
+      longSession: timeSessions.some((x) => (+x.minutes || 0) >= 180),
       contacts: outreach.length,
       accepted: outreach.filter((o) => o.statut === 'Accepté').length,
       discussion: outreach.filter((o) => o.statut === 'En discussion').length,
@@ -1168,9 +1321,16 @@ window.Sections = (function () {
         { icon: '✍️', name: 'Artiste', desc: 'Dessine à la main sur une idée', done: D.hasSketch },
         { icon: '🖼️', name: 'Moodboard', desc: 'Ajoute une image à une idée', done: D.hasImage },
       ] },
+      { cat: '⏱️ Temps de travail', items: [
+        { icon: '⏱️', name: 'Première heure', desc: 'Cumule 1 h de travail', done: D.totalHours >= 1 },
+        { icon: '📅', name: 'Assidue', desc: 'Cumule 10 h de travail', done: D.totalHours >= 10 },
+        { icon: '🔥', name: 'Bosseuse', desc: 'Cumule 50 h de travail', done: D.totalHours >= 50 },
+        { icon: '💯', name: 'Centurionne', desc: 'Cumule 100 h de travail', done: D.totalHours >= 100 },
+        { icon: '🏃', name: 'Marathon', desc: 'Une session de 3 h d’affilée', done: D.longSession },
+      ] },
       { cat: '⭐ Spécial', items: [
         { icon: '🧭', name: 'Exploratrice', desc: 'Utilise 3 espaces différents', done: D.sectionsUsed >= 3 },
-        { icon: '🌸', name: 'Tout un univers', desc: 'Utilise les 6 espaces', done: D.sectionsUsed >= 6 },
+        { icon: '🌸', name: 'Tout un univers', desc: 'Utilise les 7 espaces', done: D.sectionsUsed >= 7 },
       ] },
     ];
   }
@@ -1222,5 +1382,5 @@ window.Sections = (function () {
     ].filter(Boolean));
   }
 
-  return { outreach, todo, social, shop, ideas, finances, rewards };
+  return { outreach, todo, time, social, shop, ideas, finances, rewards };
 })();

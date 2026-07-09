@@ -10,6 +10,7 @@ Tout fonctionne **dans le navigateur**, sans compte ni connexion : tes données 
 |--------|----------------|
 | 📮 **Démarchage** | Suivre tes prises de contact (éditions, jeux, marques) : nom, type, pays, contact, date d'envoi, relance, statut, notes. Les relances à faire sont surlignées. Recherche et filtres inclus. |
 | ✅ **To-do** | Liste de tâches avec cases à cocher, **barre de progression**, marquage **urgent 🚨**, échéances et **vue calendrier** par mois. |
+| ⏱️ **Temps** | **Chrono** (Start/Stop, continue même en changeant de page) et ajout manuel d'heures, statistiques, graphique par jour, et un **système de niveaux** (titres à débloquer selon les heures travaillées). |
 | 📱 **Réseaux** | Abonnés par réseau (Instagram / TikTok / Threads) chaque mois, **évolution en %**, **courbe de croissance** et un **espace notes** dédié aux idées de contenu (vidéos / posts). |
 | 🛍️ **Boutique** | Tes produits classés par **catégories** (onglets), avec photo, **aperçu vitrine**, glisser-déposer, et un mode **Préparation** (checklist de lancement + idées de futurs produits). |
 | 💡 **Idées** | Un **grand tableau blanc** navigable : notes déplaçables, redimensionnables (avec **police adaptative**), images (coller / uploader) et dessin à la main. |

@@ -2,14 +2,18 @@
    App — routage, navigation et cycle de rendu
    =========================================================== */
 window.App = (function () {
-  const SECTIONS = ['outreach', 'todo', 'social', 'shop', 'ideas', 'finances', 'rewards'];
+  const SECTIONS = ['outreach', 'todo', 'time', 'social', 'shop', 'ideas', 'finances', 'rewards'];
   let current = 'outreach';
   let deferred = [];
+  let cleanups = [];
 
   const $ = (id) => document.getElementById(id);
 
   /* file d'attente exécutée après insertion du DOM (graphiques) */
   function defer(fn) { deferred.push(fn); }
+
+  /* nettoyage exécuté avant le prochain rendu (ex : intervalles du chrono) */
+  function addCleanup(fn) { cleanups.push(fn); }
 
   function currentFromHash() {
     const h = (location.hash || '').replace('#', '');
@@ -21,6 +25,10 @@ window.App = (function () {
     const view = $('view');
     const main = $('main');
     const scrollTop = main ? main.scrollTop : 0;
+
+    // nettoyage des ressources du rendu précédent (intervalles…)
+    cleanups.forEach((fn) => { try { fn(); } catch (e) { /* noop */ } });
+    cleanups = [];
 
     // navigation active
     document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.section === current));
@@ -110,7 +118,7 @@ window.App = (function () {
     render();
   }
 
-  return { render, defer, go, init };
+  return { render, defer, addCleanup, go, init };
 })();
 
 document.addEventListener('DOMContentLoaded', App.init);

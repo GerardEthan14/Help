@@ -28,6 +28,8 @@ window.Store = (function () {
       socialNotes: [],
       productIdeas: [],
       launchChecklist: defaultLaunch(),
+      timeSessions: [],
+      timer: { running: false, startedAt: 0, label: '' },
     };
   }
 
@@ -36,6 +38,8 @@ window.Store = (function () {
     s.financeGoals = s.financeGoals || {};
     s.productIdeas = s.productIdeas || [];
     if (!s.launchChecklist) s.launchChecklist = defaultLaunch();
+    s.timeSessions = s.timeSessions || [];
+    s.timer = s.timer || { running: false, startedAt: 0, label: '' };
     (s.finances || []).forEach((e) => {
       if (e.date === undefined) e.date = e.mois ? e.mois + '-01' : '';
       if (e.categorie === undefined) e.categorie = e.source || '';
@@ -163,6 +167,23 @@ window.Store = (function () {
     }
   }
 
+  // --- chrono de suivi du temps ---
+  function timer() { return state.timer; }
+  function startTimer(label) {
+    state.timer = { running: true, startedAt: Date.now(), label: label || '' };
+    commit();
+  }
+  function stopTimer() {
+    if (!state.timer.running) return 0;
+    const minutes = Math.max(1, Math.round((Date.now() - state.timer.startedAt) / 60000));
+    const label = state.timer.label;
+    state.timer = { running: false, startedAt: 0, label: '' };
+    state.timeSessions.push({ id: uid(), date: new Date().toISOString().slice(0, 10), minutes, label });
+    commit();
+    return minutes;
+  }
+  function cancelTimer() { state.timer = { running: false, startedAt: 0, label: '' }; commit(); }
+
   // --- objectifs mensuels de finances ---
   function getGoal(month) { return Number(state.financeGoals[month] || 0); }
   function setGoal(month, val) { state.financeGoals[month] = Math.max(0, Number(val) || 0); commit(); }
@@ -232,5 +253,6 @@ window.Store = (function () {
     categories, addCategory, removeCategory, renameCategory,
     getGoal, setGoal,
     financeCategories, addFinanceCategory, removeFinanceCategory, renameFinanceCategory,
+    timer, startTimer, stopTimer, cancelTimer,
   };
 })();
