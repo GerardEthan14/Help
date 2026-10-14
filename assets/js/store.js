@@ -17,6 +17,7 @@ window.Store = (function () {
     return {
       settings: { title: 'Mon espace' },
       shopCategories: ['Coloriages', 'Jeux', 'Éveil'],
+      outreachTypes: ['Édition', 'Jeux', 'Marque'],
       financeCategories: ['Commande particulier', 'Boutique en ligne', 'Sponsor / partenariat', 'Atelier', 'Autre'],
       financeGoals: {},
       outreach: [],
@@ -37,6 +38,7 @@ window.Store = (function () {
   function migrate(s) {
     s.financeGoals = s.financeGoals || {};
     s.productIdeas = s.productIdeas || [];
+    s.outreachTypes = s.outreachTypes || ['Édition', 'Jeux', 'Marque'];
     if (!s.launchChecklist) s.launchChecklist = defaultLaunch();
     s.timeSessions = s.timeSessions || [];
     s.timer = s.timer || { running: false, startedAt: 0, label: '' };
@@ -188,6 +190,28 @@ window.Store = (function () {
   function getGoal(month) { return Number(state.financeGoals[month] || 0); }
   function setGoal(month, val) { state.financeGoals[month] = Math.max(0, Number(val) || 0); commit(); }
 
+  // --- types de démarchage ---
+  function outreachTypes() { return state.outreachTypes || []; }
+  function addOutreachType(name) {
+    name = (name || '').trim();
+    if (name && !state.outreachTypes.includes(name)) { state.outreachTypes.push(name); commit(); }
+  }
+  function removeOutreachType(name) {
+    state.outreachTypes = state.outreachTypes.filter((c) => c !== name);
+    state.outreach.forEach((o) => { if (o.type === name) o.type = ''; });
+    commit();
+  }
+  function renameOutreachType(oldN, newN) {
+    newN = (newN || '').trim();
+    if (!newN) return;
+    const i = state.outreachTypes.indexOf(oldN);
+    if (i >= 0 && !state.outreachTypes.includes(newN)) {
+      state.outreachTypes[i] = newN;
+      state.outreach.forEach((o) => { if (o.type === oldN) o.type = newN; });
+      commit();
+    }
+  }
+
   // --- catégories de finances ---
   function financeCategories() { return state.financeCategories || []; }
   function addFinanceCategory(name) {
@@ -251,6 +275,7 @@ window.Store = (function () {
     get, list, add, update, remove, move, reorder,
     setSetting, subscribe, exportFile, importFile, uid,
     categories, addCategory, removeCategory, renameCategory,
+    outreachTypes, addOutreachType, removeOutreachType, renameOutreachType,
     getGoal, setGoal,
     financeCategories, addFinanceCategory, removeFinanceCategory, renameFinanceCategory,
     timer, startTimer, stopTimer, cancelTimer,

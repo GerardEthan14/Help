@@ -36,25 +36,29 @@ window.Sections = (function () {
   const STATUTS_OUTREACH = STATUT_OUTREACH.map((s) => s.name);
   const STATUT_MAP = {};
   STATUT_OUTREACH.forEach((s) => { STATUT_MAP[s.name] = s; });
-  const TYPES_OUTREACH = ['Édition', 'Jeux', 'Marque'];
 
   function outreach() {
     const rows = Store.list('outreach');
+    const types = Store.outreachTypes();
     const root = h('div');
 
-    const addBtn = h('button', {
-      class: 'btn btn-primary', text: '+ Ajouter un contact',
-      onclick: () => Store.add('outreach', {
-        nom: '', type: 'Édition', pays: '', contact: '',
-        dateEnvoi: '', relance: '', statut: 'À contacter', notes: '',
-      }),
-    });
-    root.appendChild(UI.pageHead('📮', 'Démarchage', 'Suivi de tes prises de contact — éditions, jeux, marques.', addBtn));
+    const actions = h('div', { class: 'page-actions' }, [
+      h('button', { class: 'btn btn-ghost', text: '⚙️ Types', title: 'Créer / renommer / supprimer un type', onclick: manageOutreachTypes }),
+      h('button', { class: 'btn btn-primary', text: '+ Ajouter un contact',
+        onclick: () => Store.add('outreach', {
+          nom: '', type: types[0] || '', pays: '', contact: '',
+          dateEnvoi: '', relance: '', statut: 'À contacter', notes: '',
+        }) }),
+    ]);
+    root.appendChild(UI.pageHead('📮', 'Démarchage', 'Suivi de tes prises de contact — éditions, jeux, marques.', actions));
+
+    // types affichés = types gérés + ceux déjà utilisés (rien n'est perdu)
+    const allTypes = uniqueSorted([...types, ...rows.map((r) => r.type).filter(Boolean)]);
 
     // barre d'outils : recherche + filtres
     const search = h('input', { class: 'field search', type: 'search', placeholder: '🔍 Rechercher (nom, pays, contact…)', value: vs.outreach.q });
     const fStatut = selectFilter(['Tous les statuts', ...STATUTS_OUTREACH], vs.outreach.statut);
-    const fType = selectFilter(['Tous les types', ...TYPES_OUTREACH], vs.outreach.type);
+    const fType = selectFilter(['Tous les types', ...allTypes], vs.outreach.type);
     const toolbar = h('div', { class: 'toolbar' }, [search, fStatut, fType]);
     root.appendChild(toolbar);
 
@@ -73,7 +77,7 @@ window.Sections = (function () {
         { key: '_dot', label: '', readonly: true, width: '30px',
           render: (r) => { const s = STATUT_MAP[r.statut] || {}; return `<span class="status-dot" title="${r.statut || ''}" style="background:${s.color || '#ccc'}"></span>`; } },
         { key: 'nom', label: 'Nom', type: 'text', width: '15%', placeholder: 'Nom…' },
-        { key: 'type', label: 'Type', type: 'select', width: '10%', options: TYPES_OUTREACH },
+        { key: 'type', label: 'Type', type: 'select', width: '10%', options: ['', ...allTypes].map((t) => ({ value: t, label: t || '—' })) },
         { key: 'pays', label: 'Pays', type: 'text', width: '9%', placeholder: 'Pays' },
         { key: 'contact', label: 'Contact', type: 'text', width: '14%', placeholder: 'email / @' },
         { key: 'dateEnvoi', label: 'Date d’envoi', type: 'date', width: '11%' },
@@ -127,6 +131,25 @@ window.Sections = (function () {
       sel.appendChild(opt);
     });
     return sel;
+  }
+
+  function manageOutreachTypes() {
+    function bodyList() {
+      const list = h('div', { style: 'display:flex;flex-direction:column;gap:8px' });
+      Store.outreachTypes().forEach((c) => {
+        list.appendChild(h('div', { style: 'display:flex;align-items:center;gap:8px' }, [
+          h('span', { style: 'flex:1;font-weight:600', text: c }),
+          h('button', { class: 'btn btn-ghost btn-sm', text: '✏️ Renommer', onclick: async () => { const nn = await UI.prompt('Nouveau nom du type', c, 'Renommer'); if (nn) { Store.renameOutreachType(c, nn); rerender(); } } }),
+          h('button', { class: 'btn btn-ghost btn-sm btn-danger', text: '🗑', onclick: async () => { if (await UI.confirm(`Supprimer le type « ${c} » ? Les contacts associés sont conservés, sans type.`)) { Store.removeOutreachType(c); rerender(); } } }),
+        ]));
+      });
+      const addBtn = h('button', { class: 'btn btn-ghost btn-sm', style: 'margin-top:6px;align-self:flex-start', text: '+ Nouveau type', onclick: async () => { const nn = await UI.prompt('Nom du nouveau type', '', 'Ajouter'); if (nn) { Store.addOutreachType(nn); rerender(); } } });
+      return [list, addBtn];
+    }
+    let close;
+    function rerender() { if (close) close(); open(); }
+    function open() { close = UI.openModal({ title: 'Types de démarchage', body: bodyList(), footer: [h('button', { class: 'btn btn-primary', text: 'Fermer', onclick: () => close() })], onClose: () => App.render() }); }
+    open();
   }
 
   // cellule Note : aperçu cliquable qui ouvre la note complète en bulle
