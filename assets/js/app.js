@@ -2,7 +2,7 @@
    App — routage, navigation et cycle de rendu
    =========================================================== */
 window.App = (function () {
-  const SECTIONS = ['outreach', 'todo', 'time', 'social', 'shop', 'ideas', 'finances', 'rewards'];
+  const SECTIONS = ['outreach', 'todo', 'time', 'social', 'shop', 'ideas', 'finances', 'cotisations', 'rewards'];
   let current = 'outreach';
   let deferred = [];
   let cleanups = [];

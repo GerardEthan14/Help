@@ -20,6 +20,7 @@ window.Sections = (function () {
     todo: { view: 'list', calMonth: fmt.thisMonth(), focusAdd: false },
     finances: { month: '' },
     shop: { cat: 'all', view: 'edit' },
+    cotisations: { year: new Date().getFullYear() },
   };
 
   /* =========================================================
@@ -1250,6 +1251,140 @@ window.Sections = (function () {
   }
 
   /* =========================================================
+     COTISATIONS SOCIALES (Belgique — indépendant)
+     ========================================================= */
+  const COTIS = { rate: 0.205, ceiling: 75024.54, minIncomePrincipal: 17374.08, exoComplementaire: 1922.16, franchiseTVA: 25000 };
+  const QDATES = ['31/03', '30/06', '30/09', '31/12'];
+
+  function estimateCotis(statut, income) {
+    income = Math.max(0, Number(income) || 0);
+    if (statut === 'complementaire') {
+      if (income < COTIS.exoComplementaire) return 0;
+      return income * COTIS.rate;
+    }
+    const base = Math.min(Math.max(income, COTIS.minIncomePrincipal), COTIS.ceiling);
+    return base * COTIS.rate;
+  }
+
+  function cotisations() {
+    const cfg = Store.cotisConfig();
+    const year = vs.cotisations.year;
+    const root = h('div');
+    root.appendChild(UI.pageHead('🧾', 'Cotisations sociales', 'Estime, mets de côté et suis tes échéances trimestrielles (Belgique).'));
+
+    root.appendChild(h('div', { class: 'cotis-note', html: '⚠️ <b>Estimation indicative</b> (barèmes 2026, hors frais de gestion) — à confirmer avec ta <b>caisse d’assurances sociales</b> ou ton comptable. Ce n’est pas un conseil officiel.' }));
+
+    // --- estimateur ---
+    const statutSel = h('select', { class: 'field' });
+    [['principal', 'À titre principal'], ['complementaire', 'À titre complémentaire']].forEach(([v, l]) => { const o = h('option', { value: v }, l); if (v === cfg.statut) o.selected = true; statutSel.appendChild(o); });
+    statutSel.addEventListener('change', () => Store.setCotisConfig({ statut: statutSel.value }));
+    const incomeInput = h('input', { class: 'field', type: 'number', min: '0', step: 'any', placeholder: 'ex : 18000', value: cfg.estIncome || '' });
+    incomeInput.addEventListener('input', () => Store.setCotisConfig({ estIncome: parseFloat(incomeInput.value) || 0 }, { silent: true }));
+    incomeInput.addEventListener('change', () => Store.setCotisConfig({ estIncome: parseFloat(incomeInput.value) || 0 }));
+    const annual = estimateCotis(cfg.statut, cfg.estIncome || 0);
+    const perT = annual / 4;
+    let estLine;
+    if (cfg.statut === 'complementaire' && (cfg.estIncome || 0) < COTIS.exoComplementaire) {
+      estLine = h('div', { class: 'cotis-result', html: `✅ <b>0 €</b> — en dessous du seuil d’exonération (${fmt.money(COTIS.exoComplementaire)}/an).` });
+    } else {
+      const minNote = cfg.statut === 'principal' && (cfg.estIncome || 0) < COTIS.minIncomePrincipal ? ' <span class="muted">(minimum à titre principal appliqué)</span>' : '';
+      estLine = h('div', { class: 'cotis-result', html: `Cotisation annuelle estimée : <b>${fmt.money(annual)}</b> · soit <b>${fmt.money(perT)}/trimestre</b>${minNote}` });
+    }
+    root.appendChild(h('div', { class: 'card card-pad' }, [
+      h('div', { class: 'card-title', text: '🧮 Estimateur de cotisations' }),
+      h('div', { class: 'cotis-grid' }, [formRow('Statut', statutSel), formRow('Revenu net annuel estimé (€)', incomeInput)]),
+      estLine,
+    ]));
+
+    // --- mise de côté (provision) ---
+    const fin = Store.list('finances');
+    const revenueYear = fin.filter((e) => (e.date || '').slice(0, 4) === String(year)).reduce((s, e) => s + (+e.montant || 0), 0);
+    const pct = cfg.provisionPct != null ? cfg.provisionPct : 25;
+    const reco = revenueYear * pct / 100;
+    const saved = cfg.provision || 0;
+    const provPct = reco > 0 ? Math.min(100, Math.round(saved / reco * 100)) : 0;
+    const pctInput = h('input', { class: 'field', type: 'number', min: '0', max: '100', step: '1', style: 'width:80px', value: pct });
+    pctInput.addEventListener('change', () => Store.setCotisConfig({ provisionPct: Math.max(0, Math.min(100, parseInt(pctInput.value, 10) || 0)) }));
+    const savedInput = h('input', { class: 'field', type: 'number', min: '0', step: 'any', style: 'width:130px', value: saved || '' });
+    savedInput.addEventListener('input', () => Store.setCotisConfig({ provision: parseFloat(savedInput.value) || 0 }, { silent: true }));
+    savedInput.addEventListener('change', () => Store.setCotisConfig({ provision: parseFloat(savedInput.value) || 0 }));
+    root.appendChild(h('div', { class: 'card card-pad' }, [
+      h('div', { class: 'card-title', text: '🐖 Mettre de côté' }),
+      h('p', { class: 'sub', style: 'margin:2px 0 12px', html: `Sur <b>${fmt.money(revenueYear)}</b> encaissés en ${year}, garde environ <b>${fmt.money(reco)}</b> de côté (cotisations + impôts).` }),
+      h('div', { class: 'cotis-prov' }, [
+        h('label', { class: 'mini-label', text: 'Part à provisionner' }), pctInput, h('span', { class: 'muted', text: '%' }),
+        h('label', { class: 'mini-label', style: 'margin-left:14px', text: 'Déjà mis de côté (€)' }), savedInput,
+      ]),
+      h('div', { class: 'progress-track', style: 'margin-top:12px' }, [h('div', { class: 'progress-fill', style: `width:${provPct}%` })]),
+      h('div', { class: 'sub', style: 'margin-top:6px', text: `${fmt.money(saved)} provisionnés sur ${fmt.money(reco)} recommandés (${provPct} %)` }),
+    ]));
+
+    // --- échéances trimestrielles ---
+    const entries = Store.list('cotisations').filter((c) => c.year === year).sort((a, b) => a.trimestre - b.trimestre);
+    const totalDue = entries.reduce((s, e) => s + (+e.montant || 0), 0);
+    const totalPaid = entries.filter((e) => e.paye).reduce((s, e) => s + (+e.montant || 0), 0);
+    const header = h('div', { class: 'cotis-year-head' }, [
+      h('button', { class: 'icon-btn', text: '‹', title: 'Année précédente', onclick: () => { vs.cotisations.year--; App.render(); } }),
+      h('span', { class: 'cotis-year', text: String(year) }),
+      h('button', { class: 'icon-btn', text: '›', title: 'Année suivante', onclick: () => { vs.cotisations.year++; App.render(); } }),
+    ]);
+    const card = h('div', { class: 'card card-pad' }, [
+      h('div', { style: 'display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap' }, [
+        h('div', { class: 'card-title', text: '📆 Échéances trimestrielles' }), header,
+      ]),
+    ]);
+    if (!entries.length) {
+      card.appendChild(h('p', { class: 'sub', style: 'margin:8px 0 12px', text: `Aucun trimestre pour ${year}. Génère-les (un montant estimé est pré-rempli, tu le remplaces par celui de ta caisse).` }));
+      card.appendChild(h('button', { class: 'btn btn-primary', text: `Générer les 4 trimestres ${year}`, onclick: () => genQuarters(year) }));
+    } else {
+      const list = h('div', { class: 'quarter-list' });
+      entries.forEach((e) => list.appendChild(quarterRow(e)));
+      card.appendChild(list);
+      card.appendChild(h('div', { class: 'cotis-totals' }, [
+        h('span', { html: `Payé : <b>${fmt.money(totalPaid)}</b> / ${fmt.money(totalDue)}` }),
+        h('span', { class: 'muted', text: `${entries.filter((e) => e.paye).length}/4 trimestres réglés` }),
+      ]));
+    }
+    root.appendChild(card);
+
+    // --- infos utiles ---
+    root.appendChild(h('div', { class: 'card card-pad cotis-info' }, [
+      h('div', { class: 'card-title', text: 'ℹ️ Bon à savoir (Belgique)' }),
+      h('ul', {}, [
+        h('li', { html: 'Tu paies tes cotisations à une <b>caisse d’assurances sociales</b> (Partena, Xerius, Liantis, UCM, Acerta…), chaque <b>trimestre</b>. L’<b>INASTI</b> chapeaute le statut.' }),
+        h('li', { html: 'Taux ~<b>20,5 %</b> du revenu net. À titre principal : minimum ~<b>890–920 €/trimestre</b>. Complémentaire : <b>0 €</b> si revenu &lt; ~1 922 €/an.' }),
+        h('li', { html: '⏳ Les 1res années sont <b>provisoires</b> puis <b>régularisées ~2 ans plus tard</b> → garde de l’argent de côté !' }),
+        h('li', { html: '🧾 TVA : <b>franchise</b> possible si chiffre d’affaires &lt; <b>25 000 €/an</b> (pas de TVA à facturer).' }),
+      ]),
+    ]));
+
+    return root;
+  }
+
+  function quarterRow(e) {
+    const chk = h('input', { class: 'check', type: 'checkbox' }); chk.checked = e.paye;
+    chk.addEventListener('change', () => Store.update('cotisations', e.id, { paye: chk.checked, datePaiement: chk.checked && !e.datePaiement ? fmt.todayISO() : e.datePaiement }));
+    const montant = h('input', { class: 'field cell-num', type: 'number', min: '0', step: 'any', style: 'width:110px', value: e.montant || '', placeholder: '0' });
+    montant.addEventListener('input', () => Store.update('cotisations', e.id, { montant: parseFloat(montant.value) || 0 }, { silent: true }));
+    montant.addEventListener('change', () => Store.update('cotisations', e.id, { montant: parseFloat(montant.value) || 0 }));
+    const dateP = h('input', { class: 'field', type: 'date', style: 'width:150px', value: e.datePaiement || '', title: 'Date de paiement' });
+    dateP.addEventListener('change', () => Store.update('cotisations', e.id, { datePaiement: dateP.value }));
+    const del = h('button', { class: 'icon-btn danger', title: 'Supprimer', text: '🗑', onclick: () => Store.remove('cotisations', e.id) });
+    return h('div', { class: 'quarter-row' + (e.paye ? ' paid' : '') }, [
+      chk,
+      h('div', { class: 'q-label' }, [h('b', { text: 'T' + e.trimestre }), h('span', { class: 'muted', text: ` · échéance ${QDATES[e.trimestre - 1]}/${e.year}` })]),
+      h('div', { class: 'q-fields' }, [h('span', { style: 'display:flex;align-items:center;gap:4px' }, [montant, h('span', { class: 'muted', text: '€' })]), dateP, h('span', { class: 'badge ' + (e.paye ? 'online' : 'prep'), text: e.paye ? 'Payé' : 'À payer' }), del]),
+    ]);
+  }
+
+  function genQuarters(year) {
+    const cfg = Store.cotisConfig();
+    const suggest = Math.round(estimateCotis(cfg.statut, cfg.estIncome || 0) / 4);
+    const have = new Set(Store.list('cotisations').filter((c) => c.year === year).map((c) => c.trimestre));
+    for (let q = 1; q <= 4; q++) if (!have.has(q)) Store.add('cotisations', { year, trimestre: q, montant: suggest || 0, paye: false, datePaiement: '', note: '' });
+  }
+
+  /* =========================================================
      7) RÉCOMPENSES (succès type Steam)
      ========================================================= */
   function rewardData() {
@@ -1405,5 +1540,5 @@ window.Sections = (function () {
     ].filter(Boolean));
   }
 
-  return { outreach, todo, time, social, shop, ideas, finances, rewards };
+  return { outreach, todo, time, social, shop, ideas, finances, cotisations, rewards };
 })();

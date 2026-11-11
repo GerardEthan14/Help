@@ -31,6 +31,8 @@ window.Store = (function () {
       launchChecklist: defaultLaunch(),
       timeSessions: [],
       timer: { running: false, startedAt: 0, label: '' },
+      cotisations: [],
+      cotisConfig: { statut: 'principal', provisionPct: 25, provision: 0 },
     };
   }
 
@@ -42,6 +44,8 @@ window.Store = (function () {
     if (!s.launchChecklist) s.launchChecklist = defaultLaunch();
     s.timeSessions = s.timeSessions || [];
     s.timer = s.timer || { running: false, startedAt: 0, label: '' };
+    s.cotisations = s.cotisations || [];
+    s.cotisConfig = Object.assign({ statut: 'principal', provisionPct: 25, provision: 0 }, s.cotisConfig || {});
     (s.finances || []).forEach((e) => {
       if (e.date === undefined) e.date = e.mois ? e.mois + '-01' : '';
       if (e.categorie === undefined) e.categorie = e.source || '';
@@ -186,6 +190,10 @@ window.Store = (function () {
   }
   function cancelTimer() { state.timer = { running: false, startedAt: 0, label: '' }; commit(); }
 
+  // --- cotisations sociales ---
+  function cotisConfig() { return state.cotisConfig; }
+  function setCotisConfig(patch, opts) { Object.assign(state.cotisConfig, patch); if (opts && opts.silent) persist(); else commit(); }
+
   // --- objectifs mensuels de finances ---
   function getGoal(month) { return Number(state.financeGoals[month] || 0); }
   function setGoal(month, val) { state.financeGoals[month] = Math.max(0, Number(val) || 0); commit(); }
@@ -279,5 +287,6 @@ window.Store = (function () {
     getGoal, setGoal,
     financeCategories, addFinanceCategory, removeFinanceCategory, renameFinanceCategory,
     timer, startTimer, stopTimer, cancelTimer,
+    cotisConfig, setCotisConfig,
   };
 })();

@@ -391,6 +391,27 @@ svg.chart { display: block; width: 100%; height: auto; }
 .content-note-ta:focus { outline: none; }
 .content-note-foot { display: flex; justify-content: flex-end; }
 
+/* ---------- Cotisations sociales ---------- */
+.cotis-note { background: var(--warn-soft); border: 1px solid #f0d9a8; color: #8a5a13; border-radius: 12px; padding: 11px 14px; font-size: 13.5px; margin-bottom: 16px; }
+.cotis-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 6px; }
+.cotis-grid .field { width: 100%; }
+@media (max-width: 620px) { .cotis-grid { grid-template-columns: 1fr; } }
+.cotis-result { margin-top: 14px; font-size: 16px; padding: 12px 14px; background: var(--accent-soft); border-radius: 10px; }
+.cotis-result b { color: var(--accent-ink); }
+.cotis-prov { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cotis-prov .mini-label { display: inline; margin: 0; }
+.cotis-year-head { display: flex; align-items: center; gap: 8px; }
+.cotis-year { font-weight: 700; font-size: 16px; min-width: 56px; text-align: center; }
+.quarter-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.quarter-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); flex-wrap: wrap; }
+.quarter-row.paid { background: var(--ok-soft); border-color: #bfe3cf; }
+.quarter-row .q-label { flex: 1; min-width: 150px; font-size: 14.5px; }
+.quarter-row .q-fields { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cotis-totals { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 14px; font-size: 14px; }
+.cotis-info ul { margin: 6px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 7px; }
+.cotis-info li { font-size: 13.5px; color: var(--ink-soft); line-height: 1.45; }
+.cotis-info li b { color: var(--ink); }
+
 /* ---------- Récompenses ---------- */
 .reward-hero { display: flex; align-items: center; gap: 20px; margin-bottom: 20px; padding: 22px 24px; border-radius: var(--radius); border: 1px solid var(--line); background: linear-gradient(135deg, var(--accent-soft), var(--accent-2-soft)); box-shadow: var(--shadow); }
 .reward-hero .trophy { font-size: 46px; line-height: 1; }
