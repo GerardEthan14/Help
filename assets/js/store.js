@@ -32,6 +32,7 @@ window.Store = (function () {
       timeSessions: [],
       timer: { running: false, startedAt: 0, label: '' },
       cotisations: [],
+      expenses: [],
       cotisConfig: { statut: 'principal', revenus: {}, frais: {}, provCotis: {}, provImpot: {} },
     };
   }
@@ -45,6 +46,7 @@ window.Store = (function () {
     s.timeSessions = s.timeSessions || [];
     s.timer = s.timer || { running: false, startedAt: 0, label: '' };
     s.cotisations = s.cotisations || [];
+    s.expenses = s.expenses || [];
     s.cotisConfig = Object.assign({ statut: 'principal', revenus: {}, frais: {}, provCotis: {}, provImpot: {} }, s.cotisConfig || {});
     s.cotisConfig.revenus = s.cotisConfig.revenus || {};
     s.cotisConfig.frais = s.cotisConfig.frais || {};

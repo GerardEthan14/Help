@@ -1334,9 +1334,9 @@ window.Sections = (function () {
       inp.addEventListener('input', () => { setRevMonth(year, i + 1, parseFloat(inp.value) || 0, true); recompute(); });
       grid.appendChild(h('label', { class: 'month-cell' }, [h('span', { class: 'month-lab', text: lab }), inp]));
     });
-    const fraisVal = (cfg.frais || {})[year] || 0;
-    const fraisInput = h('input', { class: 'field', type: 'number', min: '0', step: 'any', style: 'width:150px', placeholder: '0', value: fraisVal || '' });
-    fraisInput.addEventListener('input', () => { setCotisNested('frais', year, parseFloat(fraisInput.value) || 0, true); recompute(); });
+    // frais pro = somme des dépenses de l'année (détaillées plus bas)
+    const expYear = Store.list('expenses').filter((e) => (e.date || '').slice(0, 4) === String(year));
+    const fraisYear = expYear.reduce((s, e) => s + (+e.montant || 0), 0);
 
     const tTotals = h('span'); const tBenefice = h('span');
     root.appendChild(h('div', { class: 'card card-pad' }, [
@@ -1344,11 +1344,14 @@ window.Sections = (function () {
         h('div', { class: 'card-title', text: `💶 Revenus ${year}` }),
         h('button', { class: 'btn btn-ghost btn-sm', text: '⟳ Remplir depuis mes rentrées Finances', onclick: () => fillRevFromFinances(year) }),
       ]),
-      h('div', { class: 'cotis-grid', style: 'margin-bottom:10px' }, [formRow('Statut', statutSel), formRow('Frais professionnels estimés (€/an)', fraisInput)]),
+      h('div', { class: 'cotis-grid', style: 'margin-bottom:10px' }, [formRow('Statut', statutSel)]),
       h('div', { class: 'mini-label', style: 'margin-bottom:6px', text: 'Revenu encaissé par mois (€) — ça se cumule tout seul' }),
       grid,
       h('div', { class: 'cotis-totals', style: 'margin-top:14px' }, [tTotals, tBenefice]),
     ]));
+
+    // --- dépenses professionnelles (= frais déductibles) ---
+    root.appendChild(expensesCard(year, fraisYear));
 
     // --- résultats (mis à jour en direct) ---
     const kCotis = kpiRef('Cotisations (~an)'), kImpot = kpiRef('Impôt estimé (~an)'), kTotal = kpiRef('Total prélevé'), kNet = kpiRef('Net en poche');
@@ -1363,7 +1366,7 @@ window.Sections = (function () {
     function recompute() {
       const months = Array.from(grid.querySelectorAll('.month-input')).map((i) => parseFloat(i.value) || 0);
       const revenus = months.reduce((a, b) => a + b, 0);
-      const frais = parseFloat(fraisInput.value) || 0;
+      const frais = fraisYear;
       const benefice = Math.max(0, revenus - frais);
       const cotis = estimateCotis(cfg.statut, benefice);
       const impot = computeImpot(Math.max(0, benefice - cotis));
@@ -1447,6 +1450,46 @@ window.Sections = (function () {
     return { el, setReco(r) { reco = r; refresh(); } };
   }
 
+  // carte « dépenses professionnelles » (frais déductibles détaillés)
+  const EXP_CATS = ['Matériel', 'Matières premières', 'Fournitures', 'Marketing / pub', 'Déplacements', 'Abonnements / outils', 'Frais de port', 'Autre'];
+  function expensesCard(year, total) {
+    const rows = Store.list('expenses').filter((e) => (e.date || '').slice(0, 4) === String(year)).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const card = h('div', { class: 'card card-pad' });
+    card.appendChild(h('div', { class: 'card-title' }, [document.createTextNode(`🧾 Dépenses professionnelles ${year} `), h('span', { class: 'muted', style: 'font-weight:500;font-size:13px', text: '= frais déductibles' })]));
+    card.appendChild(h('p', { class: 'sub', style: 'margin:2px 0 12px', text: 'Ajoute chaque achat pro (matériel, fournitures, envois…) : le total vient en déduction de ton bénéfice, donc baisse tes cotisations et ton impôt.' }));
+    const date = h('input', { class: 'field', type: 'date', value: fmt.todayISO() });
+    const label = h('input', { class: 'field', placeholder: 'Ex : ramette de papier, imprimante…' });
+    const montant = h('input', { class: 'field', type: 'number', min: '0', step: 'any', placeholder: '0' });
+    const cat = h('select', { class: 'field' });
+    EXP_CATS.forEach((c, i) => { const o = h('option', { value: c }, c); if (i === 0) o.selected = true; cat.appendChild(o); });
+    const add = h('button', { class: 'btn btn-primary', text: '+ Ajouter la dépense', onclick: () => {
+      const m = parseFloat(montant.value) || 0;
+      if (m <= 0 && !label.value.trim()) { UI.toast('Indique un montant'); return; }
+      Store.add('expenses', { date: date.value || fmt.todayISO(), label: label.value.trim(), montant: m, categorie: cat.value });
+      UI.toast('Dépense ajoutée ✓');
+    } });
+    card.appendChild(h('div', { class: 'rentree-grid' }, [formRow('Date', date), formRow('Description', label), formRow('Montant (€)', montant), formRow('Catégorie', cat)]));
+    card.appendChild(h('div', { style: 'display:flex;justify-content:flex-end;margin:12px 0' }, [add]));
+    if (rows.length) {
+      card.appendChild(UI.editableTable({
+        coll: 'expenses', minWidth: 640, rows,
+        columns: [
+          { key: 'date', label: 'Date', type: 'date', width: '16%' },
+          { key: 'label', label: 'Description', type: 'text', placeholder: 'Achat…', width: '38%' },
+          { key: 'categorie', label: 'Catégorie', type: 'select', width: '24%', options: EXP_CATS.map((c) => ({ value: c, label: c })) },
+          { key: 'montant', label: 'Montant', type: 'number', min: 0, align: 'right', width: '15%' },
+        ],
+      }));
+      card.appendChild(h('div', { class: 'cotis-totals', style: 'margin-top:12px' }, [
+        h('span', { html: `Total frais ${year} : <b>${fmt.money(total)}</b>` }),
+        h('span', { class: 'muted', text: `${rows.length} dépense${rows.length > 1 ? 's' : ''}` }),
+      ]));
+    } else {
+      card.appendChild(h('p', { class: 'sub', style: 'margin:0', text: 'Aucune dépense enregistrée pour cette année.' }));
+    }
+    return card;
+  }
+
   function quarterRow(e) {
     const chk = h('input', { class: 'check', type: 'checkbox' }); chk.checked = e.paye;
     chk.addEventListener('change', () => Store.update('cotisations', e.id, { paye: chk.checked, datePaiement: chk.checked && !e.datePaiement ? fmt.todayISO() : e.datePaiement }));
@@ -1465,7 +1508,8 @@ window.Sections = (function () {
 
   function genQuarters(year) {
     const cfg = Store.cotisConfig();
-    const benefice = Math.max(0, revMonths(cfg, year).reduce((a, b) => a + b, 0) - ((cfg.frais || {})[year] || 0));
+    const frais = Store.list('expenses').filter((e) => (e.date || '').slice(0, 4) === String(year)).reduce((s, e) => s + (+e.montant || 0), 0);
+    const benefice = Math.max(0, revMonths(cfg, year).reduce((a, b) => a + b, 0) - frais);
     const suggest = Math.round(estimateCotis(cfg.statut, benefice) / 4);
     const have = new Set(Store.list('cotisations').filter((c) => c.year === year).map((c) => c.trimestre));
     for (let q = 1; q <= 4; q++) if (!have.has(q)) Store.add('cotisations', { year, trimestre: q, montant: suggest || 0, paye: false, datePaiement: '', note: '' });
