@@ -400,6 +400,12 @@ svg.chart { display: block; width: 100%; height: auto; }
 .cotis-result b { color: var(--accent-ink); }
 .cotis-prov { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .cotis-prov .mini-label { display: inline; margin: 0; }
+.month-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.month-cell { display: flex; flex-direction: column; gap: 3px; }
+.month-lab { font-size: 11.5px; font-weight: 650; color: var(--ink-soft); padding-left: 2px; }
+.month-input { width: 100%; text-align: right; font-variant-numeric: tabular-nums; padding: 7px 8px; }
+.prov-card .prov-reco { font-size: 15px; }
+.prov-card .prov-reco b { color: var(--accent-ink); }
 .cotis-year-head { display: flex; align-items: center; gap: 8px; }
 .cotis-year { font-weight: 700; font-size: 16px; min-width: 56px; text-align: center; }
 .quarter-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }

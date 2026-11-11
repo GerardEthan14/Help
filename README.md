@@ -15,7 +15,7 @@ Tout fonctionne **dans le navigateur**, sans compte ni connexion : tes données 
 | 🛍️ **Boutique** | Tes produits classés par **catégories** (onglets), avec photo, **aperçu vitrine**, glisser-déposer, et un mode **Préparation** (checklist de lancement + idées de futurs produits). |
 | 💡 **Idées** | Un **grand tableau blanc** navigable : notes déplaçables, redimensionnables (avec **police adaptative**), images (coller / uploader) et dessin à la main. |
 | 💰 **Finances** | **Jauge d'objectif du mois** (modifiable), **rentrées d'argent** détaillées (client, montant, date, catégorie), **graphique d'évolution du CA** et détail par catégorie. |
-| 🧾 **Cotisations** | **Suivi des cotisations sociales d'indépendant (Belgique)** : estimateur (~20,5 %), jauge « mettre de côté » reliée aux rentrées, et suivi des 4 échéances trimestrielles. Estimation indicative, à confirmer avec sa caisse. |
+| 🧾 **Cotisations** | **Cotisations sociales + impôt d'indépendant (Belgique)** : saisie des revenus **mois par mois** (cumul automatique), calcul des cotisations (~20,5 %) et de l'impôt, **deux jauges « mettre de côté »** séparées (cotisations / impôt), et suivi des 4 échéances trimestrielles. Estimation indicative, à confirmer avec sa caisse. |
 | 🏆 **Succès** | Des **succès à débloquer type jeu vidéo** (démarchage, organisation, réseaux, boutique, finances, créativité…) avec progression et phrases de motivation. |
 
 ## Utilisation

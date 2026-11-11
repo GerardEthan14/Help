@@ -32,7 +32,7 @@ window.Store = (function () {
       timeSessions: [],
       timer: { running: false, startedAt: 0, label: '' },
       cotisations: [],
-      cotisConfig: { statut: 'principal', provisionPct: 25, provision: 0 },
+      cotisConfig: { statut: 'principal', revenus: {}, frais: {}, provCotis: {}, provImpot: {} },
     };
   }
 
@@ -45,7 +45,11 @@ window.Store = (function () {
     s.timeSessions = s.timeSessions || [];
     s.timer = s.timer || { running: false, startedAt: 0, label: '' };
     s.cotisations = s.cotisations || [];
-    s.cotisConfig = Object.assign({ statut: 'principal', provisionPct: 25, provision: 0 }, s.cotisConfig || {});
+    s.cotisConfig = Object.assign({ statut: 'principal', revenus: {}, frais: {}, provCotis: {}, provImpot: {} }, s.cotisConfig || {});
+    s.cotisConfig.revenus = s.cotisConfig.revenus || {};
+    s.cotisConfig.frais = s.cotisConfig.frais || {};
+    s.cotisConfig.provCotis = s.cotisConfig.provCotis || {};
+    s.cotisConfig.provImpot = s.cotisConfig.provImpot || {};
     (s.finances || []).forEach((e) => {
       if (e.date === undefined) e.date = e.mois ? e.mois + '-01' : '';
       if (e.categorie === undefined) e.categorie = e.source || '';
