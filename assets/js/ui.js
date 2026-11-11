@@ -243,5 +243,15 @@ window.UI = (function () {
     return h('div', { class: 'empty' }, [h('div', { class: 'big', text: emoji }), h('div', { text })]);
   }
 
-  return { h, toast, confirm, prompt, openModal, resizeImage, fmt, editableTable, buildRow, pageHead, empty };
+  // téléchargement d'un fichier généré
+  function download(filename, content, mime) {
+    const blob = new Blob([content], { type: (mime || 'text/plain') + ';charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  return { h, toast, confirm, prompt, openModal, resizeImage, fmt, editableTable, buildRow, pageHead, empty, download };
 })();

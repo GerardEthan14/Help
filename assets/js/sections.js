@@ -1403,6 +1403,16 @@ window.Sections = (function () {
     }
     root.appendChild(card);
 
+    // --- export comptable ---
+    root.appendChild(h('div', { class: 'card card-pad' }, [
+      h('div', { class: 'card-title', text: `📤 Export annuel ${year} (pour le comptable)` }),
+      h('p', { class: 'sub', style: 'margin:2px 0 12px', text: 'Un récapitulatif complet des revenus et dépenses de l’année, prêt à transmettre à ton comptable pour la déclaration.' }),
+      h('div', { style: 'display:flex;gap:10px;flex-wrap:wrap' }, [
+        h('button', { class: 'btn btn-primary', text: '🧾 Récapitulatif (à imprimer / PDF)', onclick: () => UI.download(`recap-comptable-${year}.html`, buildRecapHTML(year), 'text/html') }),
+        h('button', { class: 'btn btn-ghost', text: '📄 Détail CSV (tableur)', onclick: () => UI.download(`detail-${year}.csv`, buildRecapCSV(year), 'text/csv') }),
+      ]),
+    ]));
+
     // --- infos utiles ---
     root.appendChild(h('div', { class: 'card card-pad cotis-info' }, [
       h('div', { class: 'card-title', text: 'ℹ️ Bon à savoir (Belgique)' }),
@@ -1423,6 +1433,72 @@ window.Sections = (function () {
     const v = h('div', { class: 'k-value', text: '—' });
     const extra = h('div', { class: 'k-delta flat' });
     return { el: h('div', { class: 'kpi' }, [h('div', { class: 'k-label', text: label }), v, extra]), v, extra };
+  }
+
+  // --- export annuel pour le comptable ---
+  function frDate(iso) { if (!iso) return ''; const p = iso.split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : iso; }
+  function cotisYearData(year) {
+    const rev = Store.list('finances').filter((e) => (e.date || '').slice(0, 4) === String(year)).slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const exp = Store.list('expenses').filter((e) => (e.date || '').slice(0, 4) === String(year)).slice().sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const revTotal = rev.reduce((s, e) => s + (+e.montant || 0), 0);
+    const expTotal = exp.reduce((s, e) => s + (+e.montant || 0), 0);
+    const benefice = Math.max(0, revTotal - expTotal);
+    const cfg = Store.cotisConfig();
+    const cotisEst = estimateCotis(cfg.statut, benefice);
+    const impotEst = computeImpot(Math.max(0, benefice - cotisEst));
+    const cotisPaid = Store.list('cotisations').filter((c) => c.year === year && c.paye).reduce((s, c) => s + (+c.montant || 0), 0);
+    const byCat = {}; exp.forEach((e) => { const c = e.categorie || 'Autre'; byCat[c] = (byCat[c] || 0) + (+e.montant || 0); });
+    return { rev, exp, revTotal, expTotal, benefice, cotisEst, impotEst, cotisPaid, byCat, statut: cfg.statut };
+  }
+
+  function buildRecapCSV(year) {
+    const d = cotisYearData(year);
+    const esc = (s) => { s = String(s == null ? '' : s); return /[";\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const num = (v) => (+v || 0).toFixed(2).replace('.', ',');
+    const rows = [['Type', 'Date', 'Description', 'Catégorie', 'Montant']];
+    d.rev.forEach((e) => rows.push(['Revenu', frDate(e.date), e.client || '', e.categorie || '', num(e.montant)]));
+    d.exp.forEach((e) => rows.push(['Dépense', frDate(e.date), e.label || '', e.categorie || '', num(e.montant)]));
+    rows.push([], ['TOTAL Revenus', '', '', '', num(d.revTotal)], ['TOTAL Dépenses (frais)', '', '', '', num(d.expTotal)], ['Bénéfice', '', '', '', num(d.benefice)], ['Cotisations déjà payées', '', '', '', num(d.cotisPaid)]);
+    return '﻿' + rows.map((r) => r.map(esc).join(';')).join('\r\n');
+  }
+
+  function buildRecapHTML(year) {
+    const d = cotisYearData(year);
+    const title = (Store.get().settings.title) || 'Mon espace';
+    const today = new Date().toLocaleDateString('fr-FR');
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+    const money = (v) => fmt.money(v);
+    const statutLabel = d.statut === 'complementaire' ? 'À titre complémentaire' : 'À titre principal';
+    const revRows = d.rev.map((e) => `<tr><td>${esc(frDate(e.date))}</td><td>${esc(e.client || '')}</td><td>${esc(e.categorie || '')}</td><td class="r">${money(+e.montant || 0)}</td></tr>`).join('') || '<tr><td colspan="4" class="mut">Aucune rentrée saisie (onglet Finances).</td></tr>';
+    const catRows = Object.keys(d.byCat).sort((a, b) => d.byCat[b] - d.byCat[a]).map((c) => `<tr><td>${esc(c)}</td><td class="r">${money(d.byCat[c])}</td></tr>`).join('') || '<tr><td colspan="2" class="mut">Aucune dépense.</td></tr>';
+    const expRows = d.exp.map((e) => `<tr><td>${esc(frDate(e.date))}</td><td>${esc(e.label || '')}</td><td>${esc(e.categorie || '')}</td><td class="r">${money(+e.montant || 0)}</td></tr>`).join('') || '<tr><td colspan="4" class="mut">Aucune dépense.</td></tr>';
+    const css = 'body{font-family:system-ui,"Segoe UI",sans-serif;color:#2c2622;max-width:820px;margin:24px auto;padding:0 20px;line-height:1.5}'
+      + 'h1{font-size:22px;margin:0 0 2px}h2{font-size:16px;margin:26px 0 8px;border-bottom:2px solid #eee;padding-bottom:4px}'
+      + '.meta{color:#6b625b;font-size:13px}table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:6px}'
+      + 'th,td{text-align:left;padding:7px 9px;border-bottom:1px solid #eee}th{background:#faf6f2;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;color:#8a827c}'
+      + 'td.r,th.r{text-align:right;font-variant-numeric:tabular-nums}.mut{color:#a99f97}'
+      + '.sum{display:grid;grid-template-columns:repeat(2,1fr);gap:8px 20px;margin-top:8px}'
+      + '.sum div{display:flex;justify-content:space-between;border-bottom:1px solid #f0ece7;padding:6px 2px}.sum b{font-variant-numeric:tabular-nums}'
+      + '.big{font-size:17px}.note{margin-top:28px;font-size:12px;color:#6b625b;background:#fbf3e4;border:1px solid #f0d9a8;border-radius:8px;padding:10px 12px}'
+      + '.bar{position:fixed;top:12px;right:12px}.bar button{padding:8px 14px;border-radius:8px;border:1px solid #ddd;background:#c26b7a;color:#fff;font-weight:600;cursor:pointer}'
+      + '@media print{.bar{display:none}body{margin:0}}';
+    return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Récapitulatif ${year} — ${esc(title)}</title><style>${css}</style></head><body>`
+      + `<div class="bar"><button onclick="window.print()">🖨️ Imprimer / PDF</button></div>`
+      + `<h1>Récapitulatif comptable ${year}</h1>`
+      + `<div class="meta">${esc(title)} · Statut : ${statutLabel} · Édité le ${today}</div>`
+      + `<h2>Résumé de l'année</h2><div class="sum">`
+      + `<div><span>Revenus encaissés</span><b>${money(d.revTotal)}</b></div>`
+      + `<div><span>Dépenses pro (frais)</span><b>−${money(d.expTotal)}</b></div>`
+      + `<div class="big"><span><b>Bénéfice</b></span><b>${money(d.benefice)}</b></div>`
+      + `<div><span>Cotisations déjà payées</span><b>${money(d.cotisPaid)}</b></div>`
+      + `<div><span>Cotisations estimées <i>(indicatif)</i></span><b>${money(d.cotisEst)}</b></div>`
+      + `<div><span>Impôt estimé <i>(indicatif)</i></span><b>${money(d.impotEst)}</b></div>`
+      + `</div>`
+      + `<h2>Revenus (${d.rev.length})</h2><table><thead><tr><th>Date</th><th>Client / source</th><th>Catégorie</th><th class="r">Montant</th></tr></thead><tbody>${revRows}<tr><th colspan="3">Total revenus</th><th class="r">${money(d.revTotal)}</th></tr></tbody></table>`
+      + `<h2>Dépenses par catégorie</h2><table><thead><tr><th>Catégorie</th><th class="r">Montant</th></tr></thead><tbody>${catRows}<tr><th>Total dépenses</th><th class="r">${money(d.expTotal)}</th></tr></tbody></table>`
+      + `<h2>Dépenses — détail (${d.exp.length})</h2><table><thead><tr><th>Date</th><th>Description</th><th>Catégorie</th><th class="r">Montant</th></tr></thead><tbody>${expRows}</tbody></table>`
+      + `<div class="note">⚠️ Document indicatif généré automatiquement pour faciliter la déclaration. Les estimations de cotisations et d'impôt ne sont pas officielles — à valider par le comptable / le SPF Finances. Conserver les factures et justificatifs ~7 ans.</div>`
+      + `</body></html>`;
   }
 
   // jauge de provision (mettre de côté), avec reco mise à jour en direct
